@@ -1,16 +1,31 @@
-# This is a sample Python script.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from discord.ext import commands
+import config
+
+# !! IMPORTANT !!
+# Load Error first every time; It has custom errors that other cogs depend on, and handles errors too
+COGS = ["Error", "Config", "Giveaway"]
+
+class Bot(commands.Bot):
+    def __init__(self, **kwargs):
+        # TODO: when_mentioned_or also takes function references,
+        #  (I think? You should probably check that too)
+        #  so replace static prefix with by-server
+        super().__init__(command_prefix=commands.when_mentioned_or('$'), **kwargs)
+        for cog in COGS:
+            try:
+                self.load_extension(f"cogs.{cog}")
+                print(f"Loaded cog {cog}")
+            except Exception as exc:
+                print(f"Could not load extension {cog} due to {exc.__class__.__name__}: {exc}")
+
+    async def on_ready(self):
+        print("Logged on as {0} (ID: {0.id})".format(self.user))
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+bot = Bot()
 
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+if __name__ == "__main__":
+    bot.run(config.TOKEN)
