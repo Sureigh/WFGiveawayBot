@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from discord_slash import SlashCommand
 from discord.ext import commands
 import config
 
@@ -14,6 +15,11 @@ class Bot(commands.Bot):
         #  (I think? You should probably check that too)
         #  so replace static prefix with by-server
         super().__init__(command_prefix=commands.when_mentioned_or('$'), **kwargs)
+
+        # SLASH COMMANDS
+        # DISGUSTING
+        SlashCommand(self, override_type=True)
+
         for cog in COGS:
             try:
                 self.load_extension(f"cogs.{cog}")
