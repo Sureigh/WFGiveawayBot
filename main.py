@@ -18,7 +18,9 @@ class Bot(commands.Bot):
 
         # SLASH COMMANDS
         # DISGUSTING
-        SlashCommand(self, override_type=True)
+        SlashCommand(self, override_type=True, sync_commands=True)
+
+        self.load_extension('jishaku')
 
         for cog in COGS:
             try:

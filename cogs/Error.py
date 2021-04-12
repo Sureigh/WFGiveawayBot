@@ -14,7 +14,11 @@ class Error(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        await ctx.send(error)
+        await ctx.channel.send(error)
+
+    @commands.Cog.listener()
+    async def on_slash_command_error(self, ctx, error):
+        await ctx.channel.send(error)
 
 def setup(bot):
     bot.add_cog(Error(bot))
