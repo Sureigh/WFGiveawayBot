@@ -18,24 +18,31 @@ class Giveaway(commands.Cog):
         self.bot = bot
 
     # TODO: Make guild_ids sync with internal config system
-    @slash.cog_slash(name="platcount", description="[description pending]",
+    @slash.cog_slash(name="platcount", description="Check how much plat you've donated to the server.",
                      guild_ids=[465910450819694592])
     async def plat_count(self, ctx):
-        await ctx.defer(hidden=await self.bot.hidden(ctx))
+        bot = self.bot
+        await ctx.defer(hidden=await bot.hidden(ctx))
+
         async with aiohttp.ClientSession(headers={"X-DataSource-Auth": "true"}) as cs:
             async with cs.get(
-                    "https://docs.google.com/spreadsheets/d/"
-                    f"14t9-54udr_eqaCgq9g1rWhPLHY_E-RxfdhKTXxgCERc/gviz/tq?tq=select+C+where+A+=+'{ctx.author_id}'"
+                "https://docs.google.com/spreadsheets/d/"
+                f"14t9-54udr_eqaCgq9g1rWhPLHY_E-RxfdhKTXxgCERc/gviz/tq?tq=select+C+where+A+=+'{ctx.author_id}'"
             ) as r:
                 results = json.loads((await r.text()).lstrip(")]}'"))
                 try:
                     plat = results['table']['rows'][0]['c'][0]['f']
-
-                    embed = discord.Embed(title="**Plat count**", description=plat, color=)
+                    # TODO: a "how much plat to next title" counter sorta
+                    embed = discord.Embed(title="__Plat count__", description=plat,
+                                          color=await bot.color(ctx))
                     await ctx.send(embed=embed)
                 # Fails if the user ID is not on the sheet
                 except IndexError:
-                    ctx.send("You haven't donated any plat yet - perhaps you can donate something today?")
+                    await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?")
+
+    @slash.cog_slash(name="test", guild_ids=[465910450819694592])
+    async def test(self, ctx, pee):
+        await ctx.send(pee + " this was a test command bro")
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):

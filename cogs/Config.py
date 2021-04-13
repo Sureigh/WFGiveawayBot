@@ -15,32 +15,34 @@ class Config(commands.Cog):
         # Only meant for SELECT queries
         async def query(*q):
             async with aiosqlite.connect('configs.db') as db:
-                cursor = await db.execute(q)
+                cursor = await db.execute(*q)
                 return await cursor.fetchone()
 
-        bot.db = query
+        async def fetch(ctx, value):
+            return await bot.query("""
+                SELECT ? FROM config
+                WHERE guild = ?
+            """, (value, ctx.guild_id))
+
+        async def hidden(ctx):
+            return bool(await fetch(ctx, "hide_command_evocation"))
+
+        async def color(ctx):
+            return discord.Color(hex(int(*await fetch(ctx, "embed_colors"), base=16)))
+
+        bot.query = query
+        bot.hidden = hidden
+        bot.color = color
 
         # I swear I'm high as fuck
-
         async def async_init():
-            async def parse_var(q, var):
-                return await bot.db("""
-                    SELECT ? FROM config
-                    WHERE guild = ?
-                """, (var, q.guild_id,))
-
-            bot.hidden = parse_var()
-            bot.color = lambda x: await bot.db("""
-                SELECT hide_command_evocation FROM config
-                WHERE guild = ?
-            """, (x.guild_id,))
-
             async with aiosqlite.connect('configs.db') as db:
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS config (
                         guild INTEGER PRIMARY KEY,
                         hide_command_evocation INTEGER DEFAULT 1,
-                        embed_colors TEXT DEFAULT #2C2F33,
+                        embed_colors TEXT DEFAULT "2c2f33",
+                        debug_mode INTEGER DEFAULT 0
                     );
                 """)
                 await db.execute("""
