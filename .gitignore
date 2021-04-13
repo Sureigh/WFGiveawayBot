@@ -23,6 +23,8 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.db
+*.db-journal
 
 # Our configuration files
 config.py

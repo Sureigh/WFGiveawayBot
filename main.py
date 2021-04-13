@@ -14,7 +14,7 @@ class Bot(commands.Bot):
         # TODO: when_mentioned_or also takes function references,
         #  (I think? You should probably check that too)
         #  so replace static prefix with by-server
-        super().__init__(command_prefix=commands.when_mentioned_or('$'), **kwargs)
+        super().__init__(command_prefix=commands.when_mentioned, **kwargs)
 
         # SLASH COMMANDS
         # DISGUSTING
