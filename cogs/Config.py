@@ -21,7 +21,7 @@ class Config(commands.Cog):
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
                 cursor = await db.execute("""
                     SELECT {0} FROM config
-                    WHERE guild = {1}
+                    WHERE guild = {1};
                 """.format(value, ctx.guild_id))
                 result = await cursor.fetchone()
 
@@ -29,35 +29,42 @@ class Config(commands.Cog):
                 if result is None:
                     await db.execute("""
                         INSERT INTO config (guild)
-                        VALUES (?)
-                    """, (ctx.guild_id, ))
+                        VALUES (?);
+                    """, (ctx.guild_id,))
                     await db.commit()
                     result = await fetch(ctx, value)
 
-            return result
+            return result[0]
+
+        async def color(ctx):
+            return discord.Color(int(await fetch(ctx, "embed_colors"), base=16))
 
         async def hidden(ctx):
             return bool(await fetch(ctx, "hide_command_evocation"))
 
-        async def color(ctx):
-            return discord.Color(hex(int(await fetch(ctx, "embed_colors"), base=16)))
+        async def rank(ctx):
+            return bool(await fetch(ctx, "rank_equal_to_threshold"))
 
         async def debug(ctx):
             return bool(await fetch(ctx, "debug_mode"))
 
-        bot.hidden = hidden
         bot.color = color
+        bot.hidden = hidden
+        bot.rank = rank
         bot.debug = debug
 
+        # Builds tables.
         # I swear I'm high as fuck
         async def async_init():
             async with aiosqlite.connect(DATABASE_NAME) as db:
+                # The ); at the end of each query is meant to show how I feel about SQL queries
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS config (
                         guild INTEGER PRIMARY KEY,
-                        hide_command_evocation INTEGER DEFAULT 1,
                         embed_colors TEXT DEFAULT '2c2f33',
-                        debug_mode INTEGER DEFAULT 0
+                        hide_command_evocation INTEGER DEFAULT 1,
+                        rank_equal_to_threshold INTEGER DEFAULT 1,
+                        debug_mode INTEGER DEFAULT 0,
                     );
                 """)
                 await db.execute("""
@@ -65,6 +72,13 @@ class Config(commands.Cog):
                         guild INTEGER,
                         message INTEGER, 
                         end TIMESTAMP
+                    );
+                """)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS ranks (
+                        guild INTEGER,
+                        rank_name TEXT,
+                        rank_threshold INTEGER
                     );
                 """)
 
