@@ -12,6 +12,7 @@ class Config(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        bot.db = DATABASE_NAME
 
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
         async def fetch(ctx, value):
@@ -19,10 +20,10 @@ class Config(commands.Cog):
                 # Yes, I know I could use ? instead.
                 # Yes, I tried it.
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
-                cursor = await db.execute("""
-                    SELECT {0} FROM config
-                    WHERE guild = {1};
-                """.format(value, ctx.guild_id))
+                cursor = await db.execute(f"""
+                    SELECT {value} FROM config
+                    WHERE guild = {ctx.guild_id};
+                """)
                 result = await cursor.fetchone()
 
                 # If entry is missing/broken/whatever - create a new one from scratch
@@ -45,12 +46,21 @@ class Config(commands.Cog):
         async def rank(ctx):
             return bool(await fetch(ctx, "rank_equal_to_threshold"))
 
+        async def ranks(ctx):
+            async with aiosqlite.connect(DATABASE_NAME) as db:
+                cursor = await db.execute("""
+                    SELECT * FROM ranks
+                    WHERE guild = ?;
+                """, (ctx.guild_id,))
+                return await cursor.fetchall()
+
         async def debug(ctx):
             return bool(await fetch(ctx, "debug_mode"))
 
         bot.color = color
         bot.hidden = hidden
         bot.rank = rank
+        bot.ranks = ranks
         bot.debug = debug
 
         # Builds tables.
@@ -64,7 +74,7 @@ class Config(commands.Cog):
                         embed_colors TEXT DEFAULT '2c2f33',
                         hide_command_evocation INTEGER DEFAULT 1,
                         rank_equal_to_threshold INTEGER DEFAULT 1,
-                        debug_mode INTEGER DEFAULT 0,
+                        debug_mode INTEGER DEFAULT 0
                     );
                 """)
                 await db.execute("""
@@ -74,11 +84,14 @@ class Config(commands.Cog):
                         end TIMESTAMP
                     );
                 """)
+                # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS ranks (
                         guild INTEGER,
                         rank_name TEXT,
-                        rank_threshold INTEGER
+                        rank_threshold INTEGER,
+                        UNIQUE(guild, rank_name),       -- Unique rank threshold per guild
+                        UNIQUE(guild, rank_threshold)   -- Unique rank name per guild
                     );
                 """)
 
