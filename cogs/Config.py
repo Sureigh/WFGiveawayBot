@@ -70,7 +70,7 @@ class Config(commands.Cog):
                 # The ); at the end of each query is meant to show how I feel about SQL queries
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS config (
-                        guild INTEGER PRIMARY KEY,
+                        guild INTEGER NOT NULL PRIMARY KEY,
                         embed_colors TEXT DEFAULT '2c2f33',
                         hide_command_evocation INTEGER DEFAULT 1,
                         rank_equal_to_threshold INTEGER DEFAULT 1,
@@ -79,7 +79,7 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
-                        guild INTEGER,
+                        guild INTEGER NOT NULL PRIMARY KEY,
                         message INTEGER, 
                         end TIMESTAMP
                     );
@@ -87,11 +87,18 @@ class Config(commands.Cog):
                 # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS ranks (
-                        guild INTEGER,
+                        guild INTEGER NOT NULL PRIMARY KEY,
                         rank_name TEXT,
                         rank_threshold INTEGER,
                         UNIQUE(guild, rank_name),       -- Unique rank threshold per guild
                         UNIQUE(guild, rank_threshold)   -- Unique rank name per guild
+                    );
+                """)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS sheets (
+                        guild INTEGER NOT NULL PRIMARY KEY,
+                        sheet_id TEXT,
+                        sheet_range TEXT
                     );
                 """)
 
