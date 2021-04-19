@@ -3,8 +3,9 @@
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from discord.ext import commands
+from discord_slash import cog_ext as slash
 import discord
 
 from config import GOOGLE_API_CREDS
@@ -20,14 +21,22 @@ class Spreadsheet(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        def grab_sheet(guild_id):
-            service = build('sheets', 'v4', credentials=Credentials.from_authorized_user_file(GOOGLE_API_CREDS, SCOPES))
+    @slash.cog_slash(name="sheet", guild_ids=[465910450819694592])
+    async def sheet(self, ctx, sheet_id, sheet_range):
+        def grab_sheet():
+            service = build('sheets', 'v4',
+                            credentials=service_account.Credentials.from_service_account_file(
+                                GOOGLE_API_CREDS, scopes=SCOPES
+                            )
+                            )
             sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=bot.sheet_id(guild_id),
-                                        range=bot.sheet_range(guild_id)).execute()
-            values = result.get('values', [])
+            result = sheet.values().get(spreadsheetId=sheet_id,
+                                        range=sheet_range).execute()
+            return result.get('values', [])
 
-        bot.loop.run_in_executor(None, grab_sheet)
+        values = await ctx.bot.loop.run_in_executor(None, grab_sheet)
+
+        await ctx.send(str(values)[:2000])
 
 
 def setup(bot):
