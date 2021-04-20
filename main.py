@@ -7,7 +7,7 @@ import config
 
 # !! IMPORTANT !!
 # Load Error first every time; It has custom errors that other cogs depend on, and handles errors too
-COGS = ["Error", "Config", "Giveaway"]
+COGS = ["Error", "Config", "Giveaway", "Timers"]
 
 class Bot(commands.Bot):
     def __init__(self, **kwargs):

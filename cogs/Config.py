@@ -46,6 +46,9 @@ class Config(commands.Cog):
         async def rank(ctx):
             return bool(await fetch(ctx, "rank_equal_to_threshold"))
 
+        async def debug(ctx):
+            return bool(await fetch(ctx, "debug_mode"))
+
         async def ranks(ctx):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 cursor = await db.execute("""
@@ -54,14 +57,21 @@ class Config(commands.Cog):
                 """, (ctx.guild_id,))
                 return await cursor.fetchall()
 
-        async def debug(ctx):
-            return bool(await fetch(ctx, "debug_mode"))
+        async def value(ctx):
+            async with aiosqlite.connect(DATABASE_NAME) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT * FROM sheet
+                    WHERE user = ?;
+                """, (ctx.author_id,))
+                return await cursor.fetchone()
 
         bot.color = color
         bot.hidden = hidden
         bot.rank = rank
-        bot.ranks = ranks
         bot.debug = debug
+        bot.ranks = ranks
+        bot.value = value
 
         # Builds tables.
         # I swear I'm high as fuck
@@ -95,10 +105,11 @@ class Config(commands.Cog):
                     );
                 """)
                 await db.execute("""
-                    CREATE TABLE IF NOT EXISTS sheets (
-                        guild INTEGER NOT NULL PRIMARY KEY,
-                        sheet_id TEXT,
-                        sheet_range TEXT
+                    CREATE TABLE IF NOT EXISTS sheet (
+                        user INTEGER NOT NULL PRIMARY KEY ON CONFLICT REPLACE,
+                        plat INTEGER,
+                        rank INTEGER,
+                        title TEXT
                     );
                 """)
 

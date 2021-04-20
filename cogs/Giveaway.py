@@ -1,15 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import aiosqlite
-import discord
 from discord.ext import commands
 from discord_slash import cog_ext as slash
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-
-from config import GOOGLE_API_CREDS
-
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 
 class Giveaway(commands.Cog):
@@ -25,52 +17,36 @@ class Giveaway(commands.Cog):
     @slash.cog_slash(name="platcount", description="Check how much plat you've donated to the server.",
                      guild_ids=[465910450819694592, 487093399741267968])
     async def plat_count(self, ctx):
-        # Thank you, GSheets. I hate you.
-        def grab_sheet():
-            service = build(
-                'sheets', 'v4',
-                credentials=service_account.Credentials.from_service_account_file(GOOGLE_API_CREDS, scopes=SCOPES)
-            )
-            result = service.spreadsheets().values().batchGet(
-                spreadsheetId="14t9-54udr_eqaCgq9g1rWhPLHY_E-RxfdhKTXxgCERc",
-                ranges=["A2:A", "C2:C", "E2:E"]
-            ).execute()
-
-            return result.get("valueRanges")
-
-        values = await self.bot.loop.run_in_executor(None, grab_sheet)
-
-        # TODO: unfuck
-        # Returns a dict of dicts, where user ID is the key and returns a dict of plat value
-        values = [value.get("values") for value in values]
-        values = {int(*user): {"plat": int(*plat), "title": str(*title), "rank": rank}
-                  for rank, (user, plat, title) in enumerate(zip(*values), start=1)}
-
-        await ctx.send(str(values)[:2000])
-
-        """message = [
-            "**Total donated platinum:**",
-            f"{plat} platinum",
-            "\n",
-            title,
-            # f"{} in leaderboard"
-        ]
-        embed = discord.Embed(title=message[0], description=message[1],
-                              color=await bot.color(ctx))
-        # await ctx.send(message, embed=embed, hidden=hidden)
-        await ctx.send(f"{await bot.ranks(ctx)}\n{results}", hidden=hidden)
+        bot = ctx.bot
+        hidden = await bot.hidden(ctx)
+        await ctx.defer(hidden=hidden)
 
         # Fails if the user ID is not on the sheet
+        # YES I'M USING WALRUSES WHAT DO YOU WANT GO AWAY
+        if (row := await bot.value(ctx)) is None:
+            await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?")
+            return
 
-            await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?")"""
+        row = {k: v for k, v in zip(row.keys(), row)}
 
-    @slash.cog_slash(name="query", guild_ids=[465910450819694592])
-    async def test(self, ctx, query):
-        await ctx.defer()
-        async with aiosqlite.connect(self.bot.db) as db:
-            await db.execute(query)
-            await db.commit()
-        await ctx.send("<:RemNice:465919491272867852>")
+        await ctx.send(str(row), hidden=hidden)
+
+        """
+        message = [
+            "**Total donated platinum:**",
+            f"{row['plat']} platinum",
+            "\n",
+            row['title'],
+            # f"{} in leaderboard"
+        ]
+
+        embed = discord.Embed(title=message[0], description=message[1],
+                              color=await bot.color(ctx))
+        if hidden:
+            await ctx.send("\n".join(message), hidden=hidden)
+        else:
+            await ctx.send(embed=embed)
+        """
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
