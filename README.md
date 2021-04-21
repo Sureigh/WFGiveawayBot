@@ -15,7 +15,7 @@ you would probably have to tweak said internal values by hand.
 # Features
 - An internal database, with data fetched and retrieved using aiosqlite
 - Data cached bi-hourly with Google's Python API
-- A lot of pain, and probably a little bit of swearing
+- A lot of pain, and probably a bit of swearing
 
 **Commands**
 

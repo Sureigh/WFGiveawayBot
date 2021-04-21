@@ -3,7 +3,9 @@
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from discord.ext import commands, tasks
+from discord_slash import cog_ext as slash
 import aiosqlite
+import discord
 
 from config import GOOGLE_API_CREDS
 
@@ -21,10 +23,7 @@ class Timers(commands.Cog):
     def cog_unload(self):
         self.check_giveaways_and_cache.cancel()
 
-    # TODO: Turn this into a command invocation instead so it can also be triggered manually
-    @tasks.loop(minutes=TIMER)
-    async def check_giveaways_and_cache(self):
-        # Sheet caching
+    async def cache_sheet(self):
         # Thank you, GSheets. I hate you.
         def grab_sheet():
             service = build(
@@ -46,12 +45,28 @@ class Timers(commands.Cog):
 
         async with aiosqlite.connect(self.bot.db) as db:
             await db.executemany("""
-                INSERT INTO sheet
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT (user) DO NOTHING,
-                ON CONFLICT (plat, rank, title) DO UPDATE (plat, rank, title);
-            """, values)
+                        INSERT INTO sheet
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT (user)
+                        DO UPDATE SET plat=sheet.plat, rank=sheet.rank, title=sheet.title;
+                    """, values)
             await db.commit()
+
+    @slash.cog_slash(name="update_sheet", description="Force update the cached spreadsheet.",
+                     guild_ids=[465910450819694592, 487093399741267968])
+    async def update_sheet(self, ctx):
+        hidden = await ctx.bot.hidden(ctx)
+        await ctx.defer(hidden)
+        if ctx.author.guild_permissions.manage_messages:
+            await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...", hidden=hidden)
+            await self.cache_sheet()
+            await ctx.send(content="👍")
+        else:
+            await ctx.send("Sorry, you must be a moderator to perform this action.", hidden=hidden)
+
+    @tasks.loop(minutes=TIMER)
+    async def check_giveaways_and_cache(self):
+        await self.cache_sheet()
 
         # Giveaway timer check
         # TODO: 'if a timer expires within 30 min, start a loop to end it at that time'

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from discord.ext import commands
+from discord_slash import cog_ext as slash
 import discord
 import aiosqlite
 
@@ -61,7 +62,7 @@ class Config(commands.Cog):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 db.row_factory = aiosqlite.Row
                 cursor = await db.execute("""
-                    SELECT * FROM sheet
+                    SELECT plat, rank, title FROM sheet
                     WHERE user = ?;
                 """, (ctx.author_id,))
                 return await cursor.fetchone()
@@ -106,7 +107,7 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS sheet (
-                        user INTEGER NOT NULL PRIMARY KEY ON CONFLICT REPLACE,
+                        user INTEGER NOT NULL PRIMARY KEY,
                         plat INTEGER,
                         rank INTEGER,
                         title TEXT
@@ -114,6 +115,11 @@ class Config(commands.Cog):
                 """)
 
         bot.loop.create_task(async_init())
+
+    @slash.cog_slash(name="config", description="Edit command configurations for the bot.",
+                     guild_ids=[465910450819694592, 487093399741267968])
+    async def config(self, ctx):
+        pass
 
 
 def setup(bot):
