@@ -9,17 +9,21 @@ class Timers(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.check_giveaways_and_cache.start()
+        self.check_timers.start()
 
     def cog_unload(self):
-        self.check_giveaways_and_cache.cancel()
+        self.check_timers.cancel()
 
     @tasks.loop(minutes=TIMER)
-    async def check_giveaways_and_cache(self):
+    async def check_timers(self):
+        # Caches GSheets data
         await self.bot.cache_sheet()
 
         # Giveaway timer check
         # TODO: 'if a timer expires within 30 min, start a loop to end it at that time'
+
+        # Disqualified timer check
+        # TODO: Same as above
 
 
 def setup(bot):

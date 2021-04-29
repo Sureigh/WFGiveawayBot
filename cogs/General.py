@@ -18,22 +18,29 @@ class General(commands.Cog):
     @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
                           guild_ids=config.guilds)
     async def command_create(self, ctx, name, response, description=None):
+        # Permissions check
+        # TODO: add this ig
+
+        # TODO: add a configurable amount of custom commands per donator,
+        #  and then check that a donator has not surpassed that amount
+
         async with aiosqlite.connect(ctx.bot.db) as db:
             cursor = await db.execute("SELECT * FROM cmds WHERE name=?", (name,))
             if bool(await cursor.fetchone()):
                 await ctx.send("A command with this name already exists. "
                                "Would you like to overwrite it instead?")
-                # TODO: - invoke subcommand, then ask if yes or no to overwrite function
+                # TODO: ask if yes or no to overwrite function
 
             # Borrowed a snippet from https://github.com/eunwoo1104/slash-bot/blob/master/main.py
             resp = await manage_commands.add_slash_command(ctx.bot.user.id, config.TOKEN,
                                                            ctx.guild_id, name, description)
 
-            async def cmd():
-                await ctx.send(response)
-
             await db.execute("INSERT INTO cmds VALUES (?, ?, ?, ?);",
-                             (ctx.guild_id, name, ctx.author_id, resp["id"]))
+                             (name, response, ctx.author_id, resp["id"]))
+
+            async def cmd():
+                result = await db.execute("SELECT resp FROM cmds WHERE cmd_id=?", (ctx.command_id,))
+                await ctx.send(*await result.fetchone())
 
         self.bot.add_slash_command(cmd, name, description, config.guilds)
 

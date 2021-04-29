@@ -20,7 +20,7 @@ class Giveaway(commands.Cog):
                      guild_ids=config.guilds)
     async def plat_count(self, ctx):
         bot = ctx.bot
-        hidden = False
+        hidden = await bot.hidden(ctx)
         await ctx.defer(hidden)
 
         # Fails if the user ID is not on the sheet

@@ -5,6 +5,8 @@ from discord_slash import cog_ext as slash
 import discord
 import aiosqlite
 
+import config
+
 DATABASE_NAME = "configs.db"
 
 
@@ -38,18 +40,23 @@ class Config(commands.Cog):
 
             return result[0]
 
+        # Fetch color of embed
         async def color(ctx):
             return discord.Color(int(await fetch(ctx, "embed_colors"), base=16))
 
+        # Fetch message evocation visibility
         async def hidden(ctx):
             return bool(await fetch(ctx, "hide_command_evocation"))
 
+        # Rank equal to threshold
         async def rank(ctx):
             return bool(await fetch(ctx, "rank_equal_to_threshold"))
 
+        # Debug mode
         async def debug(ctx):
             return bool(await fetch(ctx, "debug_mode"))
 
+        # Checks for custom plat threshold value
         async def ranks(ctx):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 cursor = await db.execute("""
@@ -77,13 +84,10 @@ class Config(commands.Cog):
                 """, (user.id, user.guild.id))
                 return bool(await cursor.fetchone())
 
-        bot.color = color
-        bot.hidden = hidden
-        bot.rank = rank
-        bot.debug = debug
-        bot.ranks = ranks
-        bot.value = value
-        bot.disq = disq
+        # Makes all of the previous fetches available as attribute
+        # Oh yeah, this is big brain time.
+        for k, v in {f.__name__: f for f in [color, hidden, rank, debug, ranks, value, disq]}.items():
+            setattr(bot, k, v)
 
         # Builds tables.
         # I swear I'm high as fuck
@@ -102,8 +106,8 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS cmds (
-                        guild INTEGER NOT NULL PRIMARY KEY,
-                        name TEXT,
+                        name NOT NULL,
+                        resp TEXT,
                         user INTEGER,
                         cmd_id INTEGER
                     );
@@ -144,7 +148,7 @@ class Config(commands.Cog):
         bot.loop.create_task(async_init())
 
     @slash.cog_slash(name="config", description="Edit command configurations for the bot.",
-                     guild_ids=[465910450819694592, 487093399741267968])
+                     guild_ids=config.guilds)
     async def config(self, ctx):
         pass
 

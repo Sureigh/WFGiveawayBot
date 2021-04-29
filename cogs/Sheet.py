@@ -57,9 +57,9 @@ class Sheet(commands.Cog):
         if ctx.author.guild_permissions.manage_messages:
             await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...", hidden=hidden)
             await ctx.bot.cache_sheet()
-            await ctx.send(content="👍", hidden=hidden)
+            await ctx.send(content="Successfully updated spreadsheet cache. 👍", hidden=hidden)
         else:
-            await ctx.send("Sorry, you must be a moderator to perform this action.", hidden=hidden)
+            await ctx.send("Sorry, you must be a moderator to perform this action. 👎", hidden=hidden)
 
 
 def setup(bot):
