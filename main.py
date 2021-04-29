@@ -3,15 +3,20 @@
 
 from discord_slash import SlashCommand
 from discord.ext import commands
+import discord
 import config
 
 # !! IMPORTANT !!
 # Load Error first every time; It has custom errors that other cogs depend on, and handles errors too
-COGS = ["Error", "Config", "Giveaway", "Timers"]
+# TODO: so where them custom errors at homie
+COGS = ["Error", "Config", "General", "Giveaway", "Sheet", "Timers"]
+
 
 class Bot(commands.Bot):
     def __init__(self, **kwargs):
-        super().__init__(command_prefix=commands.when_mentioned, **kwargs)
+        intents = discord.Intents.default()
+        intents.members = True
+        super().__init__(command_prefix=commands.when_mentioned, intents=intents, **kwargs)
 
         # SLASH COMMANDS
         # DISGUSTING

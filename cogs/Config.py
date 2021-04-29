@@ -58,6 +58,7 @@ class Config(commands.Cog):
                 """, (ctx.guild_id,))
                 return await cursor.fetchall()
 
+        # Fetches plat, title and ranking on spreadsheet
         async def value(ctx):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 db.row_factory = aiosqlite.Row
@@ -67,12 +68,22 @@ class Config(commands.Cog):
                 """, (ctx.author_id,))
                 return await cursor.fetchone()
 
+        # Checks if a user is disqualified or not on the current server
+        async def disq(user):
+            async with aiosqlite.connect(DATABASE_NAME) as db:
+                cursor = await db.execute("""
+                    SELECT duration FROM disq
+                    WHERE user = ? AND guild = ?;
+                """, (user.id, user.guild.id))
+                return bool(await cursor.fetchone())
+
         bot.color = color
         bot.hidden = hidden
         bot.rank = rank
         bot.debug = debug
         bot.ranks = ranks
         bot.value = value
+        bot.disq = disq
 
         # Builds tables.
         # I swear I'm high as fuck
@@ -85,7 +96,16 @@ class Config(commands.Cog):
                         embed_colors TEXT DEFAULT '2c2f33',
                         hide_command_evocation INTEGER DEFAULT 1,
                         rank_equal_to_threshold INTEGER DEFAULT 1,
-                        debug_mode INTEGER DEFAULT 0
+                        debug_mode INTEGER DEFAULT 0,
+                        disq_role INTEGER
+                    );
+                """)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS cmds (
+                        guild INTEGER NOT NULL PRIMARY KEY,
+                        name TEXT,
+                        user INTEGER,
+                        cmd_id INTEGER
                     );
                 """)
                 await db.execute("""
@@ -103,6 +123,13 @@ class Config(commands.Cog):
                         rank_threshold INTEGER,
                         UNIQUE(guild, rank_name),       -- Unique rank threshold per guild
                         UNIQUE(guild, rank_threshold)   -- Unique rank name per guild
+                    );
+                """)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS disq (
+                        guild INTEGER,
+                        user INTEGER, 
+                        duration TIMESTAMP
                     );
                 """)
                 await db.execute("""
