@@ -30,32 +30,20 @@ class Giveaway(commands.Cog):
 
         row = {k: v for k, v in zip(row.keys(), row)}
 
+        # Thanks Olivia uwu
         def parse_ordinal(num):
-            # Thanks Olivia uwu
             ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
             if num in [11, 12, 13] or (place := ordinal.get(num % 10)) is None:
                 return f"{num}th"
             return place
 
-        if not hidden:
-            embed = discord.Embed(title="**__Your donation statistics:__**",
-                                  color=await bot.color(ctx))
-            embed.add_field(name="**Total donated platinum:**", value=f"{row['plat']} platinum", inline=False)
-            if row['title'] is not None:
-                embed.add_field(name="**Current donator rank:**", value=f"{row['title']}")
-            embed.set_footer(text=f"{parse_ordinal(row['rank'])} place in leaderboard")
+        embed = discord.Embed(title="**__Your donation statistics:__**", color=await bot.color(ctx))
+        embed.add_field(name="**Total donated platinum:**", value=f"{row['plat']} platinum", inline=False)
+        if row['title'] is not None:
+            embed.add_field(name="**Current donator rank:**", value=f"{row['title']}")
+        embed.set_footer(text=f"{parse_ordinal(row['rank'])} place in leaderboard")
 
-            await ctx.send(embed=embed)
-        else:
-            message = [
-                "**__Your donation statistics:__**",
-                "**Total donated platinum:**",
-                f"{row['plat']} platinum\n",
-                f"**Current donator rank:**:\n{row['title']}\n" if row['title'] is not None else "",
-                f"{parse_ordinal(row['rank'])} place in leaderboard"
-            ]
-
-            await ctx.send("\n".join(message), hidden=hidden)
+        await ctx.send(embed=embed, hidden=hidden)
 
     @slash.cog_slash(name="donation", description="Fill out a donation form to donate your items.",
                      guild_ids=config.guilds)

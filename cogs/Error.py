@@ -13,13 +13,13 @@ class Error(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        if await ctx.bot.debug(ctx):
-            await ctx.channel.send(f"{error.__class__.__name__}: {error}")
+        # if await ctx.bot.debug(ctx):
+        await ctx.channel.send(f"{error.__class__.__name__}: {error}")
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx, error):
-        if await ctx.bot.debug(ctx):
-            await ctx.channel.send(f"{error.__class__.__name__}: {error}")
+        # if await ctx.bot.debug(ctx):
+        await ctx.channel.send(f"{error.__class__.__name__}: {error}")
 
 def setup(bot):
     bot.add_cog(Error(bot))

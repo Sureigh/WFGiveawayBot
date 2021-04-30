@@ -18,16 +18,16 @@ class Config(commands.Cog):
         bot.db = DATABASE_NAME
 
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
-        async def fetch(ctx, value):
+        async def fetch(ctx, _value):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 # Yes, I know I could use ? instead.
                 # Yes, I tried it.
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
-                cursor = await db.execute(f"""
-                    SELECT {value} FROM config
+                async with db.execute(f"""
+                    SELECT {_value} FROM config
                     WHERE guild = {ctx.guild_id};
-                """)
-                result = await cursor.fetchone()
+                """) as cursor:
+                    result = await cursor.fetchone()
 
                 # If entry is missing/broken/whatever - create a new one from scratch
                 if result is None:
@@ -36,7 +36,7 @@ class Config(commands.Cog):
                         VALUES (?);
                     """, (ctx.guild_id,))
                     await db.commit()
-                    result = await fetch(ctx, value)
+                    result = await fetch(ctx, _value)
 
             return result[0]
 
@@ -69,11 +69,11 @@ class Config(commands.Cog):
         async def value(ctx):
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 db.row_factory = aiosqlite.Row
-                cursor = await db.execute("""
+                async with db.execute("""
                     SELECT plat, rank, title FROM sheet
                     WHERE user = ?;
-                """, (ctx.author_id,))
-                return await cursor.fetchone()
+                """, (ctx.author_id,)) as cursor:
+                    return cursor.fetchone()
 
         # Checks if a user is disqualified or not on the current server
         async def disq(user):
@@ -86,8 +86,8 @@ class Config(commands.Cog):
 
         # Makes all of the previous fetches available as attribute
         # Oh yeah, this is big brain time.
-        for k, v in {f.__name__: f for f in [color, hidden, rank, debug, ranks, value, disq]}.items():
-            setattr(bot, k, v)
+        for f in [color, hidden, rank, debug, ranks, value, disq]:
+            setattr(bot, f.__name__, f)
 
         # Builds tables.
         # I swear I'm high as fuck
@@ -106,9 +106,10 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS cmds (
-                        name NOT NULL,
+                        name TEXT NOT NULL,
                         resp TEXT,
                         user INTEGER,
+                        guild_id INTEGER,
                         cmd_id INTEGER
                     );
                 """)
