@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from discord.ext import commands
+from discord.ext.commands import MissingPermissions
 
 class Error(commands.Cog):
     """
@@ -18,6 +19,11 @@ class Error(commands.Cog):
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx, error):
+        errors = {MissingPermissions: "Sorry, you must be a moderator to perform this action. 👎", }
+
+        if e := errors.get(type(error)):
+            ctx.channel.send(e)
+
         # if await ctx.bot.debug(ctx):
         await ctx.channel.send(f"{error.__class__.__name__}: {error}")
 

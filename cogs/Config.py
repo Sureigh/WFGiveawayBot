@@ -108,9 +108,9 @@ class Config(commands.Cog):
                     CREATE TABLE IF NOT EXISTS cmds (
                         name TEXT NOT NULL,
                         resp TEXT,
+                        desc TEXT,
                         user INTEGER,
-                        guild_id INTEGER,
-                        cmd_id INTEGER
+                        guild_id INTEGER
                     );
                 """)
                 await db.execute("""

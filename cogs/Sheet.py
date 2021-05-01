@@ -54,12 +54,11 @@ class Sheet(commands.Cog):
     async def update_sheet(self, ctx):
         hidden = await ctx.bot.hidden(ctx)
         await ctx.defer(hidden)
-        if ctx.author.guild_permissions.manage_messages:
-            await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...", hidden=hidden)
-            await ctx.bot.cache_sheet()
-            await ctx.send(content="Successfully updated spreadsheet cache. 👍", hidden=hidden)
-        else:
-            await ctx.send("Sorry, you must be a moderator to perform this action. 👎", hidden=hidden)
+        if not ctx.author.guild_permissions.manage_messages:
+            raise commands.MissingPermissions
+        await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...", hidden=hidden)
+        await ctx.bot.cache_sheet()
+        await ctx.send(content="Successfully updated spreadsheet cache. 👍", hidden=hidden)
 
 
 def setup(bot):

@@ -79,6 +79,9 @@ class Giveaway(commands.Cog):
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
+        # you need
+        # TODO: this shit
+
         # reaction should be the tada emote, duh
         # the reaction should also be added on a valid giveaway
 
