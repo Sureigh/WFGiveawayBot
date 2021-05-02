@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 
+import discord
 from discord.ext import commands
 from discord.ext.commands import MissingPermissions
+
+import io
+
 
 class Error(commands.Cog):
     """
@@ -25,7 +29,13 @@ class Error(commands.Cog):
             ctx.channel.send(e)
 
         # if await ctx.bot.debug(ctx):
-        await ctx.channel.send(f"{error.__class__.__name__}: {error}")
+        # Does this even work? We'll find out when we get there, I guess
+        if e := isinstance(error, discord.HTTPException):
+            if error.status == 400:
+                text = discord.File(io.StringIO(error.text))
+                await ctx.channel.send("Your message was too long, so I've wrapped it in a file for you.", file=text)
+        else:
+            await ctx.channel.send(f"{error.__class__.__name__}: {error}")
 
 def setup(bot):
     bot.add_cog(Error(bot))

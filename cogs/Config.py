@@ -110,7 +110,8 @@ class Config(commands.Cog):
                         resp TEXT,
                         desc TEXT,
                         user INTEGER,
-                        guild_id INTEGER
+                        guild_id INTEGER,
+                        cmd_id INTEGER
                     );
                 """)
                 await db.execute("""
