@@ -19,16 +19,17 @@ class General(commands.Cog):
     # Actual logic of custom commands
     option = manage_commands.create_option("Hidden", "Send reply hidden.", bool, False)
 
-    async def cmd_template(self, _ctx, hidden=None):
-        async with aiosqlite.connect(self.bot.db) as _db:
-            async with _db.execute("SELECT resp FROM cmds WHERE name=?", (_ctx.name,)) as _result:
-                await _ctx.send(*await _result.fetchone(), hidden=bool(hidden))
+    async def cmd_template(self, ctx, hidden=None):
+        async with aiosqlite.connect(self.bot.db) as db:
+            async with db.execute("SELECT resp FROM cmds WHERE name=?", (ctx.name,)) as _result:
+                await ctx.send(*await _result.fetchone(), hidden=bool(hidden))
 
     async def cmd_init(self):
         """Loads custom commands into the bot."""
         await self.bot.wait_until_ready()
 
         async with aiosqlite.connect(self.bot.db) as db:
+            # Add all commands
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM cmds") as cursor:
                 rows = await cursor.fetchall()
@@ -38,6 +39,20 @@ class General(commands.Cog):
                     self.cmd_template, row["name"], row["desc"], [row["guild_id"]], [self.option]
                 )
             await self.bot.slash.sync_all_commands()
+
+            # Update command guild IDs
+            # I know config.guilds is a thing, but hey, I'm trying to learn to be creative, okay? Let me go with it.
+            async with db.execute("SELECT DISTINCT guild_id FROM cmds") as cursor:
+                guilds = [row["guild_id"] for row in await cursor.fetchall()]
+
+            for guild_id in guilds:
+                resp = await manage_commands.get_all_commands(self.bot.user.id, self.bot.http.token, guild_id)
+                resp = [(cmd["id"], cmd["name"]) for cmd in resp]
+
+                async with db.execute("SELECT name FROM cmds WHERE guild_id=?", (guild_id,)) as cursor:
+                    cmds = await cursor.fetchall()
+                await db.executemany("UPDATE cmds SET cmd_id=? WHERE name=?", resp)
+                await db.commit()
 
     @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
                           guild_ids=config.guilds)
