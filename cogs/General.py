@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-
+import discord
 from discord.ext import commands
 from discord_slash import cog_ext as slash
 from discord_slash.utils import manage_commands
+
 import aiosqlite
+import asyncio
 
 import config
 
@@ -14,6 +16,41 @@ class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         bot.loop.create_task(self.cmd_init())
+
+        async def react_and_wait(msg: discord.Message, **kwargs: str) -> str:
+            for emote in kwargs.values():
+                await msg.add_reaction(emote)
+
+            def check_msg(_msg):
+                return all((_msg.content in kwargs.keys(), _msg.channel == msg.channel, _msg.author == msg.author))
+
+            def check_reaction(reaction, user):
+                return all((reaction.message == msg, reaction.emoji in kwargs.keys(), user == msg.author))
+
+            # ?tag wait_for multiple in dpy for more info
+            done, pending = await asyncio.wait(
+                (self.bot.wait_for('message', check=check_msg),
+                 self.bot.wait_for('reaction_add', check=check_reaction)),
+                return_when=asyncio.FIRST_COMPLETED, timeout=60
+            )
+            try:
+                coro = done.pop().result()
+            except IndexError:
+                return await msg.channel.send("Choice timed out.")
+
+            for future in done:
+                future.exception()
+            for future in pending:
+                future.cancel()
+
+            # If wait_for_message
+            if isinstance(coro, discord.Message):
+                return coro.content
+            else:
+                reaction, _ = coro
+                return {v: k for k, v in kwargs.items()}.get(str(reaction.emoji))
+
+        bot.react_and_wait = react_and_wait
 
     # Borrowed a snippet from https://github.com/eunwoo1104/slash-bot/blob/master/main.py
     # Actual logic of custom commands
@@ -57,7 +94,7 @@ class General(commands.Cog):
     @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
                           guild_ids=config.guilds)
     async def command_create(self, ctx, name, response, description=None):
-        if not (moderator := ctx.author.guild_permissions.manage_messages):  # TODO: if not mod or donator
+        if not (moderator := ctx.author.guild_permissions.manage_messages) or False:  # TODO: if not mod or donator
             raise commands.MissingPermissions(["manage_messages"])
         elif len(name) > 32:
             return await ctx.send("Command name is too long! (Over 32 characters)")
@@ -78,11 +115,15 @@ class General(commands.Cog):
                 if not moderator:
                     return await ctx.send("A command with this name already exists.")
                 else:
-                    await ctx.send("A command with this name already exists.\n"
-                                   "Would you like to overwrite it?\n\n**Y / N**")
-                    return
+                    msg = await ctx.send("A command with this name already exists.\n"
+                                         "Would you like to overwrite it?\n\n**Y / N**")
+                    # pep8 moment xd
+                    reaction = await ctx.bot.react_and_wait(msg, Y=":regional_indicator_y:", N=":regional_indicator_n:")
+                    if reaction == "Y":
+                        # TODO: Invoke subcommand
+                        pass
 
-                    # TODO: ask if yes or no to overwrite function
+                    # TODO: consider a cleanup command that removes reactions or something idk i'm tired bye
 
             resp = await manage_commands.add_slash_command(
                 ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id, name, description, [self.option]
@@ -95,7 +136,6 @@ class General(commands.Cog):
         self.bot.slash.add_slash_command(self.cmd_template, name, description, config.guilds, [self.option])
         await ctx.send(f"Command with name '{name}' successfully created.")
 
-    # TODO: Perms check for command creator/mod+
     @slash.cog_subcommand(base="command", name="remove", description="Remove an existing custom command.",
                           guild_ids=config.guilds)
     async def command_remove(self, ctx, name):
@@ -108,7 +148,14 @@ class General(commands.Cog):
 
             await manage_commands.remove_slash_command(ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id, cmd_id)
             await db.execute("DELETE FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id))
+            await db.commit()
         await ctx.send(f"Command with name '{name}' successfully removed.")
+
+    @slash.cog_subcommand(base="command", name="update",
+                          description="Update an existing custom command's name, response and/or description.",
+                          guild_ids=config.guilds)
+    async def update_command(self, ctx, current_name, name=None, response=None, description=None):
+        pass
 
 
 def setup(bot):
