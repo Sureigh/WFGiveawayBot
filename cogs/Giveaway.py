@@ -4,8 +4,13 @@ from discord.ext import commands
 from discord_slash import cog_ext as slash
 import discord
 
+import datetime  # More like, datetorture
+import re
+
 import config
 
+
+# TODO: fun fact checks (might) be fucked, find out if they actually are lmao
 class Giveaway(commands.Cog):
     """
     The actual cog that adds in giveaway-related commands,
@@ -14,6 +19,18 @@ class Giveaway(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+
+        def date_parser(date: str) -> datetime.timedelta:
+            """
+            Parses and converts a string dateform into a python timedelta object.
+            Format should follow as (number)(time unit) - e.g 3d, 2 weeks, 3w 30 seconds are all valid examples.
+            """
+            # TODO: oh god i didn't think abou what to do with how to sort and parse this data as a timedelta FUCK
+            times = [time.lowercase() for time in re.findall(r"(\d+\s*(?:mo|[wdms]))", date, flags=re.I)]
+            order = {k: i for i, k in enumerate(("mo", "w", "d", "m", "s"))}
+            times = sorted(times, key=lambda t: order[re.search(r"mo|[wdms]", t)[0]])
+
+            return datetime.timedelta()
 
     # TODO: Make guild_ids sync with internal config system
     @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
@@ -50,20 +67,15 @@ class Giveaway(commands.Cog):
     async def donation(self, ctx):
         pass
 
-    @slash.cog_subcommand(base="disqualify", name="user", description="Disqualify a user.",
+    @slash.cog_subcommand(base="disqualify", name="user", description="Disqualify a user from joining giveaways.",
                           guild_ids=config.guilds)
-    async def disq_user(self, ctx, user: discord.Member, duration):
+    @commands.has_guild_permissions(manage_messages=True)
+    async def disq_user(self, ctx, user: discord.Member, duration, reason=None):
         pass
-
-    @slash.cog_subcommand(base="disqualify", name="time",
-                          description="Check how long until you're re-eligible for giveaways.",
-                          guild_ids=config.guilds)
-    async def disq_time(self, ctx):
-        # This should return a timedelta? iunno lol
-        ctx.bot.disq(ctx.author)
 
     @slash.cog_subcommand(base="disqualify", name="check", description="Check a user's disqualification history",
                           guild_ids=config.guilds)
+    @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
         if not self.bot.disq(user):
             return await ctx.send("User has not been disqualified on this server yet.")
@@ -77,17 +89,21 @@ class Giveaway(commands.Cog):
         <User has not been disqualified on this server yet.>
         """
 
-    @commands.Cog.listener()
-    async def on_reaction_add(self, reaction, user):
-        # you need
-        # TODO: this shit
+    @slash.cog_subcommand(base="disqualify", name="time",
+                          description="Check how long until you're re-eligible for giveaways.",
+                          guild_ids=config.guilds)
+    async def disq_time(self, ctx):
+        # This should return a timedelta? iunno lol
+        ctx.bot.disq(ctx.author)
 
-        # reaction should be the tada emote, duh
-        # the reaction should also be added on a valid giveaway
+    @slash.cog_subcommand(base="giveaway", name="start", description="Start a new giveaway.", guild_ids=config.guilds)
+    @commands.has_any_role()  # TODO: Moderator or giveaway role
+    async def give_start(self, ctx, duration, item, ):
+        # TODO: How're you gonna parse the time? Figure it out.
+        pass
 
-        # if all(reaction == "the tada emote idk", ):
-
-        # if user is not eligible and re-reacts to it multiple times (configurable amount), they get auto disq
+    @slash.cog_subcommand(base="giveaway", name="end", description="End an existing giveaway.", guild_ids=config.guilds)
+    async def give_end(self, ctx, giveaway_id: int):
         pass
 
     # Handles dodging of disqualification
