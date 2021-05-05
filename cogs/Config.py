@@ -151,6 +151,7 @@ class Config(commands.Cog):
 
     @slash.cog_slash(name="config", description="Edit command configurations for the bot.",
                      guild_ids=config.guilds)
+    @commands.has_guild_permissions(manage_messages=True)
     async def config(self, ctx):
         pass
 

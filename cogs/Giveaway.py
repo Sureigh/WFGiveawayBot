@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-
-from discord.ext import commands
-from discord_slash import cog_ext as slash
-import discord
-
 import datetime  # More like, datetorture
 import re
+
+import discord
+from discord.ext import commands
+from discord_slash import cog_ext as slash
+from discord_slash.utils.manage_commands import create_choice, create_option
 
 import config
 
@@ -20,17 +20,21 @@ class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        def date_parser(date: str) -> datetime.timedelta:
-            """
-            Parses and converts a string dateform into a python timedelta object.
-            Format should follow as (number)(time unit) - e.g 3d, 2 weeks, 3w 30 seconds are all valid examples.
-            """
-            # TODO: oh god i didn't think abou what to do with how to sort and parse this data as a timedelta FUCK
-            times = [time.lowercase() for time in re.findall(r"(\d+\s*(?:mo|[wdms]))", date, flags=re.I)]
-            order = {k: i for i, k in enumerate(("mo", "w", "d", "m", "s"))}
-            times = sorted(times, key=lambda t: order[re.search(r"mo|[wdms]", t)[0]])
+    @staticmethod
+    def date_parser(date: str) -> datetime.datetime:
+        """
+        Parses and converts a string dateform into a (future) python datetime object.
+        Format should follow as (number)(time unit) - e.g 3d, 2 weeks, 3w 30 seconds are all valid examples.
+        """
 
-            return datetime.timedelta()
+        month, week, day, minute, second = ([] for _ in range(5))
+
+        units = {"mo": month, "w": week, "d": day, "m": minute, "s": second}
+        for length, unit in re.findall(r"(\d+)\s*(mo|[wdms])", date, flags=re.I):
+            units[unit.lower()] += [int(length), ]
+        week = sum(week) + sum(month) * 4.345  # haha yes no month signifiers in timedelta
+        return datetime.datetime.now() + datetime.timedelta(weeks=week, days=sum(day), minutes=sum(minute),
+                                                            seconds=sum(second))
 
     # TODO: Make guild_ids sync with internal config system
     @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
@@ -97,14 +101,23 @@ class Giveaway(commands.Cog):
         ctx.bot.disq(ctx.author)
 
     @slash.cog_subcommand(base="giveaway", name="start", description="Start a new giveaway.", guild_ids=config.guilds)
-    @commands.has_any_role()  # TODO: Moderator or giveaway role
-    async def give_start(self, ctx, duration, item, ):
-        # TODO: How're you gonna parse the time? Figure it out.
-        pass
+    @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
+    async def give_start(self, ctx, duration):
+        # item, restrictions, duration, channel: discord.TextChannel = None
+        dur = self.date_parser(duration)
+        await ctx.send(dur.strftime("%B %d, %I:%M %p"))
 
     @slash.cog_subcommand(base="giveaway", name="end", description="End an existing giveaway.", guild_ids=config.guilds)
     async def give_end(self, ctx, giveaway_id: int):
         pass
+
+    @slash.cog_subcommand(base="giveaway", name="edit",
+                          description="Edit an existing giveaway's duration or restriction(s).",
+                          guild_ids=config.guilds, )
+    async def give_end(self, ctx, giveaway_id: int):
+        pass
+
+    # TODO: print a copy of the ongoing giveaway, with labels on each part of the giveaway, then ask for what to edit
 
     # Handles dodging of disqualification
     @commands.Cog.listener()
