@@ -5,7 +5,6 @@ import re
 import discord
 from discord.ext import commands
 from discord_slash import cog_ext as slash
-from discord_slash.utils.manage_commands import create_choice, create_option
 
 import config
 
@@ -25,16 +24,24 @@ class Giveaway(commands.Cog):
         """
         Parses and converts a string dateform into a (future) python datetime object.
         Format should follow as (number)(time unit) - e.g 3d, 2 weeks, 3w 30 seconds are all valid examples.
+
+        (Thank you ava :verycool:)
         """
 
-        month, week, day, minute, second = ([] for _ in range(5))
-
-        units = {"mo": month, "w": week, "d": day, "m": minute, "s": second}
+        units = dict.fromkeys('mo w d m s'.split(), 0)
         for length, unit in re.findall(r"(\d+)\s*(mo|[wdms])", date, flags=re.I):
-            units[unit.lower()] += [int(length), ]
-        week = sum(week) + sum(month) * 4.345  # haha yes no month signifiers in timedelta
-        return datetime.datetime.now() + datetime.timedelta(weeks=week, days=sum(day), minutes=sum(minute),
-                                                            seconds=sum(second))
+            units[unit.lower()] += int(length)
+        month, week, day, minute, second = units.values()
+        week += month * 4.345  # haha yes no month signifiers in timedelta
+        return datetime.datetime.now() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
+
+    @staticmethod
+    # Thanks Olivia uwu
+    def parse_ordinal(num):
+        ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
+        if num in [11, 12, 13] or (place := ordinal.get(num % 10)) is None:
+            return f"{num}th"
+        return place
 
     # TODO: Make guild_ids sync with internal config system
     @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
@@ -51,18 +58,11 @@ class Giveaway(commands.Cog):
 
         row = {k: v for k, v in zip(row.keys(), row)}
 
-        # Thanks Olivia uwu
-        def parse_ordinal(num):
-            ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
-            if num in [11, 12, 13] or (place := ordinal.get(num % 10)) is None:
-                return f"{num}th"
-            return place
-
         embed = discord.Embed(title="**__Your donation statistics:__**", color=await bot.color(ctx))
         embed.add_field(name="**Total donated platinum:**", value=f"{row['plat']} platinum", inline=False)
         if row['title'] is not None:
             embed.add_field(name="**Current donator rank:**", value=f"{row['title']}")
-        embed.set_footer(text=f"{parse_ordinal(row['rank'])} place in leaderboard")
+        embed.set_footer(text=f"{self.parse_ordinal(row['rank'])} place in leaderboard")
 
         await ctx.send(embed=embed, hidden=hidden)
 
@@ -77,7 +77,7 @@ class Giveaway(commands.Cog):
     async def disq_user(self, ctx, user: discord.Member, duration, reason=None):
         pass
 
-    @slash.cog_subcommand(base="disqualify", name="check", description="Check a user's disqualification history",
+    @slash.cog_subcommand(base="disqualify", name="check", description="Check a user's disqualification history.",
                           guild_ids=config.guilds)
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
@@ -94,9 +94,9 @@ class Giveaway(commands.Cog):
         """
 
     @slash.cog_subcommand(base="disqualify", name="time",
-                          description="Check how long until you're re-eligible for giveaways.",
+                          description="Check how long until you or a user is re-eligible for giveaways.",
                           guild_ids=config.guilds)
-    async def disq_time(self, ctx):
+    async def disq_time(self, ctx, user: discord.Member = None):
         # This should return a timedelta? iunno lol
         ctx.bot.disq(ctx.author)
 

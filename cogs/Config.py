@@ -101,7 +101,8 @@ class Config(commands.Cog):
                         hide_command_evocation INTEGER DEFAULT 1,
                         rank_equal_to_threshold INTEGER DEFAULT 1,
                         debug_mode INTEGER DEFAULT 0,
-                        disq_role INTEGER
+                        disq_role INTEGER,
+                        giveaway_role INTEGER
                     );
                 """)
                 await db.execute("""

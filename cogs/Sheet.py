@@ -49,7 +49,7 @@ class Sheet(commands.Cog):
 
         bot.cache_sheet = cache_sheet
 
-    @slash.cog_slash(name="update_sheet", description="Force update the cached spreadsheet.",
+    @slash.cog_slash(name="update_sheet", description="Force updates the cached spreadsheet.",
                      guild_ids=config.guilds)
     async def update_sheet(self, ctx):
         hidden = await ctx.bot.hidden(ctx)
