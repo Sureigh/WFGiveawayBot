@@ -30,7 +30,7 @@ class Error(commands.Cog):
 
         # if await ctx.bot.debug(ctx):
         # Does this even work? We'll find out when we get there, I guess
-        if e := isinstance(error, discord.HTTPException):
+        if isinstance(error, discord.HTTPException):
             if error.status == 400:
                 text = discord.File(io.StringIO(error.text))
                 await ctx.channel.send("Your message was too long, so I've wrapped it in a file for you.", file=text)

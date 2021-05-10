@@ -93,10 +93,9 @@ class General(commands.Cog):
 
     @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
                           guild_ids=config.guilds)
+    @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
     async def command_create(self, ctx, name, response, description=None):
-        if not (moderator := ctx.author.guild_permissions.manage_messages) or False:  # TODO: if not mod or donator
-            raise commands.MissingPermissions(["manage_messages"])
-        elif len(name) > 32:
+        if len(name) > 32:
             return await ctx.send("Command name is too long! (Over 32 characters)")
         elif len(await manage_commands.get_all_commands(ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id)) >= 100:
             return await ctx.send("Too many commands in guild! (Limit is 100 commands per guild)")
@@ -112,18 +111,18 @@ class General(commands.Cog):
                 result = await cursor.fetchone()
 
             if bool(result):
-                if not moderator:
+                if not ctx.author.guild_permissions.manage_messages:  # If not moderator
                     return await ctx.send("A command with this name already exists.")
-                else:
-                    msg = await ctx.send("A command with this name already exists.\n"
-                                         "Would you like to overwrite it?\n\n**Y / N**")
-                    # pep8 moment xd
-                    reaction = await ctx.bot.react_and_wait(msg, Y=":regional_indicator_y:", N=":regional_indicator_n:")
-                    if reaction == "Y":
-                        # TODO: Invoke subcommand
-                        pass
 
-                    # TODO: consider a cleanup command that removes reactions or something idk i'm tired bye
+                msg = await ctx.send("A command with this name already exists.\n"
+                                     "Would you like to overwrite it?\n\n**Y / N**")
+                # pep8 moment xd
+                reaction = await ctx.bot.react_and_wait(msg, Y=":regional_indicator_y:", N=":regional_indicator_n:")
+                if reaction == "Y":
+                    # TODO: Invoke subcommand
+                    pass
+
+                # TODO: consider a cleanup command that removes reactions or something idk i'm tired bye
 
             resp = await manage_commands.add_slash_command(
                 ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id, name, description, [self.option]

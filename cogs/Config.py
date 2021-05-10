@@ -78,11 +78,11 @@ class Config(commands.Cog):
         # Checks if a user is disqualified or not on the current server
         async def disq(user):
             async with aiosqlite.connect(DATABASE_NAME) as db:
-                cursor = await db.execute("""
+                async with await db.execute("""
                     SELECT duration FROM disq
                     WHERE user = ? AND guild = ?;
-                """, (user.id, user.guild.id))
-                return bool(await cursor.fetchone())
+                """, (user.id, user.guild.id)) as cursor:
+                    return bool(await cursor.fetchone())
 
         # Makes all of the previous fetches available as attribute
         # Oh yeah, this is big brain time.
@@ -117,7 +117,7 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
-                        guild INTEGER NOT NULL PRIMARY KEY,
+                        guild INTEGER NOT NULL,
                         message INTEGER, 
                         end TIMESTAMP
                     );
@@ -125,7 +125,7 @@ class Config(commands.Cog):
                 # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS ranks (
-                        guild INTEGER NOT NULL PRIMARY KEY,
+                        guild INTEGER NOT NULL,
                         rank_name TEXT,
                         rank_threshold INTEGER,
                         UNIQUE(guild, rank_name),       -- Unique rank threshold per guild
