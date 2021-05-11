@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime  # More like, datetorture
+import pickle
 import re
 
 import discord
@@ -8,11 +9,13 @@ from discord_slash import cog_ext as slash
 
 import config
 
-class GiveawayEntry:
+
+class GiveawayEntry(discord.Embed):
     """Each instance is supposed to represent a giveaway entry in a server."""
 
-    # TODO: Add class method to edit giveaway timer
-    def __init__(self, ctx, giveaway_data, duration):
+    def __init__(self, ctx, giveaway_data, **kwargs):
+        super().__init__(**kwargs)
+
         def date_parser(date: str) -> datetime.datetime:
             """
             Parses and converts a string dateform into a (future) python datetime object.
@@ -22,24 +25,87 @@ class GiveawayEntry:
             """
 
             units = dict.fromkeys('mo w d m s'.split(), 0)
-            for length, unit in re.findall(r"(\d+)\s*(mo|[wdms])", date, flags=re.I):
+            for length, unit in re.findall(r"(\d+)\s*?(mo|[wdms])", date, flags=re.I):
                 units[unit.lower()] += int(length)
             month, week, day, minute, second = units.values()
             week += month * 4.345  # haha yes no month signifiers in timedelta
             return datetime.datetime.now() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
 
-        self.date = date_parser
-        self.duration = date_parser(duration)
+        def giveaway_parser(giveaway_data: str) -> dict:
+            """
+            giveaway_data should be written like the following split into rows:
+            Date, Platform data w/ giveaway row (Optional), [This can be split into two rows, too]
+            Item name,
+            Restrictions (Either custom or keywords will be searched),
+            Donators,
+            Description (Optional)
+
+            Example data:
+            4d PC | R3186
+            5k Platinum
+            Restrictions: 400-1000 in game hours, Less than 1500 plat balance, 2.5 Mil credits for the trade tax.
+            Donated By: SomeUser#1234
+            Contact OtherUser#3456 for Pickup
+
+            Raw data returned should be:
+                - Date
+                - Platform
+                - Row (merged with above into author heading)
+                - Restrictions
+                - Donor
+                - Sender
+                - Description
+            """
+            # TODO: Replace anything starting with config_ and put in bot config
+            data = {}
+            platform = row = None
+            config_row_signifier = "R"
+            config_platforms = ["PC", "Xbox", "Switch", "PS4"]
+            config_keywords = ["donate", "pickup", "contact"]
+
+            # TODO: C'mon, Sera. There has to be a better way than this, right?
+            for line in giveaway_data.splitlines():
+                # Date
+                if data.get("time") is None and line[0].isdigit():
+                    # If date_parser successfully detected a valid timestamp
+                    if not datetime.datetime.now() >= (time := date_parser(line)):
+                        data["time"] = time
+
+                # Platform
+                # TODO: add platforms config
+
+                elif (data.get("platform") is None and
+                      (match := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", line, flags=re.I))):
+                    platform = {p.lower(): p for p in config_platforms}[match[0].lower()]
+
+                # Restrictions
+                # TODO: Something something config
+                elif data.get("restriction") is None and (match := re.search("restrict", line, flags=re.I)):
+                    pass
+
+                # Donor/Sender
+                # TODO: maybe add these key words in config too? just to let staff know "hey we searchin these"
+                elif match := re.search(rf"((?P<type>{'|'.join(config_keywords)}).*?(?P<user>\w+#\d+))",
+                                        line, flags=re.I):
+                    pass
+
+                # Anything else that doesn't match will be added to the description.
+                else:
+                    if data.get("description") is None:
+                        pass
+
+            data["platform_row"] = platform + row
+
+        self.data = giveaway_parser(giveaway_data)
+
+        # self.timestamp
 
         # TODO: Process giveawa_data
         # TODO: Setup giveaway
 
-        self.embed = discord.Embed(title=".")
-
     def __conform__(self, protocol):
         """Adapts giveaway data so that it may be safely stored by the sqlite database."""
-        # TODO
-        pass
+        return pickle.dumps(self)
 
     def edit(self, **kwargs):
         """Edits the giveaway's information."""
@@ -102,17 +168,17 @@ class Giveaway(commands.Cog):
                           guild_ids=config.guilds)
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
-        if not self.bot.disq(user):
-            return await ctx.send("User has not been disqualified on this server yet.")
-        # Should look like:
         """
+        Should look like:
         User's disqualification history:
             - start-end
             - start-end
             - start-end
-        or 
+        or
         <User has not been disqualified on this server yet.>
         """
+        if not self.bot.disq(user):
+            return await ctx.send("User has not been disqualified on this server yet.")
 
     @slash.cog_subcommand(base="disqualify", name="time",
                           description="Check how long until you or a user is re-eligible for giveaways.",
@@ -126,22 +192,29 @@ class Giveaway(commands.Cog):
     @slash.cog_subcommand(base="giveaway", name="start", description="Start a new giveaway. (See help for more info)",
                           guild_ids=config.guilds)
     @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
-    async def give_start(self, ctx, giveaway_data, duration, channel: discord.TextChannel = None):
+    async def give_start(self, ctx, giveaway_data, channel: discord.TextChannel = None):
         """
         Starts a giveaway on a given channel.
 
         giveaway_data should be written like the following, split into rows:
-        Platform data w/ giveaway row (Optional)
-        Item name
-        Restrictions (Either custom or keywords will be searched)
+        Platform data w/ giveaway row (Optional),
+        Item name,
+        Restrictions (Either custom or keywords will be searched),
         Description (Optional)
         """
-        giveaway = GiveawayEntry(ctx, giveaway_data, duration)
+
+        async def giveaway():
+            return GiveawayEntry(ctx, giveaway_data)
+
+        giveaway = await self.bot.loop.run_in_executor(None, giveaway)
+
         # TODO: insert (and convert) GiveawayEntry into SQLiteDB
+        # TODO: Make this part of config, I guess?
+        config_msg = "__ :tada: Giveaway :tada: __"
 
         if channel is None:
-            return await ctx.send(embed=giveaway.embed)
-        await channel.send(embed=giveaway.embed)
+            return await ctx.send(config_msg, embed=giveaway)
+        await channel.send(config_msg, embed=giveaway)
 
     @slash.cog_subcommand(base="giveaway", name="reroll", description="Reroll a finished giveaway.",
                           guild_ids=config.guilds)

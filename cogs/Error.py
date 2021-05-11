@@ -19,7 +19,7 @@ class Error(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         # if await ctx.bot.debug(ctx):
-        await ctx.channel.send(f"{error.__class__.__name__}: {error}")
+        await ctx.channel.send(f"{type(error)}: {error}")
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx, error):

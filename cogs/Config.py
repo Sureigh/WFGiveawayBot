@@ -94,6 +94,7 @@ class Config(commands.Cog):
         async def async_init():
             async with aiosqlite.connect(DATABASE_NAME) as db:
                 # The ); at the end of each query is meant to show how I feel about SQL queries
+                # TODO: Each entry could also be a config object! hehe
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS config (
                         guild INTEGER NOT NULL PRIMARY KEY,
@@ -105,6 +106,7 @@ class Config(commands.Cog):
                         giveaway_role INTEGER
                     );
                 """)
+                # TODO: COMMAND OBJECTS LET'S GO
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS cmds (
                         name TEXT NOT NULL,
@@ -118,11 +120,14 @@ class Config(commands.Cog):
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
                         guild INTEGER NOT NULL,
-                        message INTEGER, 
-                        end TIMESTAMP
+                        end TIMESTAMP NOT NULL,
+                        giveaway_id TEXT NOT NULL, 
+                        giveaway BLOB NOT NULL,
+                        UNIQUE(guild, giveaway_id)
                     );
                 """)
                 # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY
+                # TODO: Maybe a rank could be a Rank object?
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS ranks (
                         guild INTEGER NOT NULL,
