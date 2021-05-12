@@ -8,8 +8,13 @@ from discord.ext import commands
 from discord_slash import cog_ext as slash
 
 import config
+from Error import GiveawayError
 
 
+# TODO: Big brain performance saving method:
+#  Check that there are giveaways within the TIMER variable's time frame.
+#  If there are, when once giveaway ends, stop that process and then start a new one that ends at timedelta!
+#  Therefore we can just reuse "one" process infinitely within that timer frame
 class GiveawayEntry(discord.Embed):
     """Each instance is supposed to represent a giveaway entry in a server."""
 
@@ -31,7 +36,7 @@ class GiveawayEntry(discord.Embed):
             week += month * 4.345  # haha yes no month signifiers in timedelta
             return datetime.datetime.now() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
 
-        def giveaway_parser(giveaway_data: str) -> dict:
+        def giveaway_parser(giveaway: str) -> dict:
             """
             giveaway_data should be written like the following split into rows:
             Date, Platform data w/ giveaway row (Optional), [This can be split into two rows, too]
@@ -61,44 +66,69 @@ class GiveawayEntry(discord.Embed):
             platform = row = None
             config_row_signifier = "R"
             config_platforms = ["PC", "Xbox", "Switch", "PS4"]
-            config_keywords = ["donate", "pickup", "contact"]
+            config_keywords = {"donor": ["donor", "donate"],
+                               "sender": ["sender", "pickup", "contact"]}
 
-            # TODO: C'mon, Sera. There has to be a better way than this, right?
-            for line in giveaway_data.splitlines():
-                # Date
-                if data.get("time") is None and line[0].isdigit():
-                    # If date_parser successfully detected a valid timestamp
-                    if not datetime.datetime.now() >= (time := date_parser(line)):
-                        data["time"] = time
+            # Thanks snek uwu
+            def check_date(l):
+                if m := re.search(r"(\d+)\s*?(?:mo|[wdms])", l, flags=re.I):
+                    if not datetime.datetime.now() >= (time := date_parser(m[1])):
+                        return time
 
-                # Platform
-                # TODO: add platforms config
+            def check_plat(l):
+                if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", l, flags=re.I):
+                    return {p.lower(): p for p in config_platforms}[m[1].lower()]
 
-                elif (data.get("platform") is None and
-                      (match := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", line, flags=re.I))):
-                    platform = {p.lower(): p for p in config_platforms}[match[0].lower()]
+            def check_row(l):
+                if m := re.search(rf"{config_row_signifier}\d+", l, flags=re.I):
+                    return m[0]
 
-                # Restrictions
-                # TODO: Something something config
-                elif data.get("restriction") is None and (match := re.search("restrict", line, flags=re.I)):
-                    pass
+            # TODO: Grab the text on the right, split it by comma, search for keywords
+            def check_resc(l):
+                if m := re.search("restrict", l, flags=re.I):
+                    return ",".split(l)
 
-                # Donor/Sender
-                # TODO: maybe add these key words in config too? just to let staff know "hey we searchin these"
-                elif match := re.search(rf"((?P<type>{'|'.join(config_keywords)}).*?(?P<user>\w+#\d+))",
-                                        line, flags=re.I):
-                    pass
+            def check_donor(l):
+                if m := re.search(rf"((?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+))", l, flags=re.I):
+                    return m[1]
 
-                # Anything else that doesn't match will be added to the description.
-                else:
-                    if data.get("description") is None:
-                        pass
+            def check_sender(l):
+                if m := re.search(rf"((?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+))", l, flags=re.I):
+                    return m[1]
 
-            data["platform_row"] = platform + row
+            checks = {
+                'date': check_date,
+                'plat': check_plat,
+                'row': check_row,
+                'resc': check_resc,
+                'donor': check_donor,
+                'sender': check_sender
+            }
+            ignored = []
+
+            for line in giveaway.splitlines():
+                line.strip()
+                checked = False
+
+                for key, check in checks.items():
+                    if key not in ignored and (result := check(line)):
+                        data[key] = result
+                        checked = True
+                        ignored.append(key)
+
+                if not (data.get("description") or checked):  # Description
+                    data["description"] = line
+
+            if data.get("platform") and data.get("row"):
+                data["platform_row"] = data.pop("platform") + data.pop("row")
+
+            return data
 
         self.data = giveaway_parser(giveaway_data)
 
-        # self.timestamp
+        if not (time := self.data.get("date")):
+            raise GiveawayError("Missing date data!")
+        self.timestamp = time
 
         # TODO: Process giveawa_data
         # TODO: Setup giveaway
@@ -112,7 +142,10 @@ class GiveawayEntry(discord.Embed):
         # TODO
         pass
 
+
 # TODO: fun fact checks (might) be fucked, find out if they actually are lmao
+# TODO: Maybe a "giveaways won" stat? See how many they've joined is... impossible to keep track of without counting,
+#  but I think one of the GSheets has winner data...
 class Giveaway(commands.Cog):
     """
     The actual cog that adds in giveaway-related commands,
