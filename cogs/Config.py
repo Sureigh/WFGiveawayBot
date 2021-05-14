@@ -6,8 +6,7 @@ import discord
 import aiosqlite
 
 import config
-
-DATABASE_NAME = "configs.db"
+from config import DATABASE_NAME
 
 
 class Config(commands.Cog):
@@ -15,7 +14,6 @@ class Config(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        bot.db = DATABASE_NAME
 
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
         async def fetch(ctx, _value):
@@ -120,7 +118,7 @@ class Config(commands.Cog):
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
                         guild INTEGER NOT NULL,
-                        end TIMESTAMP NOT NULL,
+                        end REAL NOT NULL,
                         giveaway_id TEXT NOT NULL, 
                         giveaway BLOB NOT NULL,
                         UNIQUE(guild, giveaway_id)

@@ -4,8 +4,10 @@ import pickle
 import re
 
 import discord
+import discord_slash
 from discord.ext import commands
 from discord_slash import cog_ext as slash
+import humanfriendly
 
 import config
 from Error import GiveawayError
@@ -18,7 +20,7 @@ from Error import GiveawayError
 class GiveawayEntry(discord.Embed):
     """Each instance is supposed to represent a giveaway entry in a server."""
 
-    def __init__(self, ctx, giveaway_data, **kwargs):
+    def __init__(self, ctx: discord_slash.SlashContext, giveaway_data, **kwargs):
         super().__init__(**kwargs)
 
         def date_parser(date: str) -> datetime.datetime:
@@ -55,46 +57,49 @@ class GiveawayEntry(discord.Embed):
             Raw data returned should be:
                 - Date
                 - Platform
-                - Row (merged with above into author heading)
+                - Row number (merged with above into author heading)
+                - Item
                 - Restrictions
                 - Donor
                 - Sender
                 - Description
             """
             # TODO: Replace anything starting with config_ and put in bot config
-            data = {}
-            platform = row = None
+            _data = {}
             config_row_signifier = "R"
             config_platforms = ["PC", "Xbox", "Switch", "PS4"]
             config_keywords = {"donor": ["donor", "donate"],
                                "sender": ["sender", "pickup", "contact"]}
 
             # Thanks snek uwu
-            def check_date(l):
-                if m := re.search(r"(\d+)\s*?(?:mo|[wdms])", l, flags=re.I):
-                    if not datetime.datetime.now() >= (time := date_parser(m[1])):
+            def check_date(_line):
+                if m := re.search(r"(\d+)\s*?(?:mo|[wdms])", _line, flags=re.I):
+                    if datetime.datetime.now() < (_time := date_parser(m[1])):
                         return time
 
-            def check_plat(l):
-                if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", l, flags=re.I):
+            def check_plat(_line):
+                if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", _line, flags=re.I):
                     return {p.lower(): p for p in config_platforms}[m[1].lower()]
 
-            def check_row(l):
-                if m := re.search(rf"{config_row_signifier}\d+", l, flags=re.I):
+            def check_row(_line):
+                if m := re.search(rf"(?<!\w){config_row_signifier}\d+", _line, flags=re.I):
                     return m[0]
 
-            # TODO: Grab the text on the right, split it by comma, search for keywords
-            def check_resc(l):
-                if m := re.search("restrict", l, flags=re.I):
-                    return ",".split(l)
+            def check_resc(_line):
+                if m := re.search(r"restrict[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
+                    return m[1].strip().split(",")
 
-            def check_donor(l):
-                if m := re.search(rf"((?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+))", l, flags=re.I):
+            def check_donor(_line):
+                if m := re.search(rf"((?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+))", _line, flags=re.I):
                     return m[1]
 
-            def check_sender(l):
-                if m := re.search(rf"((?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+))", l, flags=re.I):
+            def check_sender(_line):
+                if m := re.search(rf"((?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+))", _line, flags=re.I):
                     return m[1]
+
+            def check_desc(_line):
+                if m := re.search(rf"desc[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
+                    return m[1].strip()
 
             checks = {
                 'date': check_date,
@@ -102,7 +107,8 @@ class GiveawayEntry(discord.Embed):
                 'row': check_row,
                 'resc': check_resc,
                 'donor': check_donor,
-                'sender': check_sender
+                'sender': check_sender,
+                'desc': check_desc
             }
             ignored = []
 
@@ -112,26 +118,47 @@ class GiveawayEntry(discord.Embed):
 
                 for key, check in checks.items():
                     if key not in ignored and (result := check(line)):
-                        data[key] = result
+                        _data[key] = result
                         checked = True
                         ignored.append(key)
 
-                if not (data.get("description") or checked):  # Description
-                    data["description"] = line
+                if not (_data.get("item") or checked):  # Item
+                    _data["item"] = line
 
-            if data.get("platform") and data.get("row"):
-                data["platform_row"] = data.pop("platform") + data.pop("row")
+            _data["platform_row"] = _data.pop("platform", "") + _data.pop("row", "")
 
-            return data
+            return _data
 
         self.data = giveaway_parser(giveaway_data)
+        data = self.data
 
         if not (time := self.data.get("date")):
             raise GiveawayError("Missing date data!")
-        self.timestamp = time
+        elif not (item := self.data.get("item")):
+            raise GiveawayError("Misisng item data!")
 
-        # TODO: Process giveawa_data
-        # TODO: Setup giveaway
+        # Constructs the actual embed
+        self.title = item
+        self.timestamp = time
+        self.description = "React with :tada: to join the giveaway!"
+        self.set_author(name=data["platform_row"])
+        if resc := self.data.get("resc"):
+            self.add_field(name="Restrictions:", value="\n".join(f"- {r}" for r in resc))
+        if donor := self.data.get("donor"):
+            self.add_field(name="Donator:", value=donor)
+        self.add_field(name="Hosted by:", value=ctx.author.mention, inline=False)
+
+        time_left: datetime.timedelta = time - datetime.datetime.now()
+        self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left))
+
+        # If the time remaining for giveaway is lesser than the timer's next interval
+        if time_left < datetime.timedelta(minutes=config.TIMER):
+            pass
+            # TODO: Add giveaway to end of giveaway queue
+            #  if the time is shorter than that, however, just run it as its own task
+        # If not (which should be most cases) it will shelve the giveaway on the SQL db
+        else:
+            pass
 
     def __conform__(self, protocol):
         """Adapts giveaway data so that it may be safely stored by the sqlite database."""

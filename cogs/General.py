@@ -57,7 +57,7 @@ class General(commands.Cog):
     option = manage_commands.create_option("Hidden", "Send reply hidden.", bool, False)
 
     async def cmd_template(self, ctx, hidden=None):
-        async with aiosqlite.connect(self.bot.db) as db:
+        async with aiosqlite.connect(config.DATABASE_NAME) as db:
             async with db.execute("SELECT resp FROM cmds WHERE name=?", (ctx.name,)) as _result:
                 await ctx.send(*await _result.fetchone(), hidden=bool(hidden))
 
@@ -65,7 +65,7 @@ class General(commands.Cog):
         """Loads custom commands into the bot."""
         await self.bot.wait_until_ready()
 
-        async with aiosqlite.connect(self.bot.db) as db:
+        async with aiosqlite.connect(config.DATABASE_NAME) as db:
             # Add all commands
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM cmds") as cursor:
@@ -105,7 +105,7 @@ class General(commands.Cog):
         # TODO: add a configurable amount of custom commands per donator,
         #  and then check that a donator has not surpassed that amount
 
-        async with aiosqlite.connect(ctx.bot.db) as db:
+        async with aiosqlite.connect(config.DATABASE_NAME) as db:
             # Checks if command already exists
             async with db.execute("SELECT * FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id)) as cursor:
                 result = await cursor.fetchone()
@@ -138,7 +138,7 @@ class General(commands.Cog):
     @slash.cog_subcommand(base="command", name="remove", description="Remove an existing custom command.",
                           guild_ids=config.guilds)
     async def command_remove(self, ctx, name):
-        async with aiosqlite.connect(ctx.bot.db) as db:
+        async with aiosqlite.connect(config.DATABASE_NAME) as db:
             async with db.execute("SELECT user, cmd_id FROM cmds WHERE name=? AND guild_id=?",
                                   (name, ctx.guild_id)) as cursor:
                 owner, cmd_id = await cursor.fetchone()

@@ -38,7 +38,7 @@ class Sheet(commands.Cog):
             values = [(int(*user), int(*plat), rank, str(*title))
                       for rank, (user, plat, title) in enumerate(zip(*values), start=1)]
 
-            async with aiosqlite.connect(self.bot.db) as db:
+            async with aiosqlite.connect(config.DATABASE_NAME) as db:
                 await db.executemany("""
                             INSERT INTO sheet
                             VALUES (?, ?, ?, ?)

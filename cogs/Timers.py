@@ -3,7 +3,8 @@
 from discord.ext import commands, tasks
 import aiosqlite
 
-TIMER = 15.0
+import config
+
 
 class Timers(commands.Cog):
     """A cog that manages an hourly timer to cache the giveaway spreadsheet, and start giveaway timers."""
@@ -15,7 +16,7 @@ class Timers(commands.Cog):
     def cog_unload(self):
         self.check_timers.cancel()
 
-    @tasks.loop(minutes=TIMER)
+    @tasks.loop(minutes=config.TIMER)
     async def check_timers(self):
         bot = self.bot
 
@@ -23,7 +24,7 @@ class Timers(commands.Cog):
         await bot.cache_sheet()
 
         # Giveaway timer check
-        async with aiosqlite.connect(bot.db) as db:
+        async with aiosqlite.connect(config.DATABASE_NAME) as db:
             async with db.execute("""
                 SELECT * FROM giveaways
             """) as cursor:
