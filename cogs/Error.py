@@ -6,9 +6,7 @@ from discord.ext.commands import MissingPermissions
 
 import io
 
-class GiveawayError(BaseException):
-    """Should be raised when the giveaway could not be created for reasons."""
-    pass
+from errors import GiveawayError
 
 class Error(commands.Cog):
     """
@@ -21,8 +19,8 @@ class Error(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        if await ctx.bot.debug(ctx):
-            await ctx.channel.send(f"{type(error)}: {error}")
+        # if await ctx.bot.debug(ctx):
+        await ctx.channel.send(f"{error.__name__}: {error}")
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx, error):
@@ -38,10 +36,14 @@ class Error(commands.Cog):
                 await ctx.channel.send("Your message was too long, so I've wrapped it in a file for you.", file=text)
 
         elif isinstance(error, GiveawayError):
-            await ctx.channel.send(f"{type(error)}: {error}")
+            await ctx.channel.send(f"{error.__name__}: {error}")
 
+        await ctx.channel.send(f"{error.__name__}: {error}")
+
+        """
         elif await ctx.bot.debug(ctx):
             await ctx.channel.send(f"{type(error)}: {error}")
+        """
 
 def setup(bot):
     bot.add_cog(Error(bot))

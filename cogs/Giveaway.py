@@ -2,7 +2,9 @@
 import datetime  # More like, datetorture
 import pickle
 import re
+import typing
 
+import aiosqlite
 import discord
 import discord_slash
 from discord.ext import commands
@@ -10,7 +12,15 @@ from discord_slash import cog_ext as slash
 import humanfriendly
 
 import config
-from Error import GiveawayError
+from errors import GiveawayError
+
+
+# Thanks Olivia uwu
+def parse_ordinal(num):
+    ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
+    if num in [11, 12, 13] or not (place := ordinal.get(num % 10)):
+        return f"{num}th"
+    return place
 
 
 # TODO: Big brain performance saving method:
@@ -20,7 +30,7 @@ from Error import GiveawayError
 class GiveawayEntry(discord.Embed):
     """Each instance is supposed to represent a giveaway entry in a server."""
 
-    def __init__(self, ctx: discord_slash.SlashContext, giveaway_data, **kwargs):
+    def __init__(self, ctx, giveaway_data, **kwargs):
         super().__init__(**kwargs)
 
         def date_parser(date: str) -> datetime.datetime:
@@ -36,7 +46,7 @@ class GiveawayEntry(discord.Embed):
                 units[unit.lower()] += int(length)
             month, week, day, minute, second = units.values()
             week += month * 4.345  # haha yes no month signifiers in timedelta
-            return datetime.datetime.now() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
+            return datetime.datetime.utcnow() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
 
         def giveaway_parser(giveaway: str) -> dict:
             """
@@ -73,9 +83,9 @@ class GiveawayEntry(discord.Embed):
 
             # Thanks snek uwu
             def check_date(_line):
-                if m := re.search(r"(\d+)\s*?(?:mo|[wdms])", _line, flags=re.I):
-                    if datetime.datetime.now() < (_time := date_parser(m[1])):
-                        return time
+                if m := re.search(r"\d+\s*?(?:mo|[wdms])", _line, flags=re.I):
+                    if datetime.datetime.utcnow() < (_time := date_parser(m[0])):
+                        return _time
 
             def check_plat(_line):
                 if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", _line, flags=re.I):
@@ -90,11 +100,11 @@ class GiveawayEntry(discord.Embed):
                     return m[1].strip().split(",")
 
             def check_donor(_line):
-                if m := re.search(rf"((?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+))", _line, flags=re.I):
+                if m := re.search(rf"(?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+)", _line, flags=re.I):
                     return m[1]
 
             def check_sender(_line):
-                if m := re.search(rf"((?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+))", _line, flags=re.I):
+                if m := re.search(rf"(?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+)", _line, flags=re.I):
                     return m[1]
 
             def check_desc(_line):
@@ -113,11 +123,12 @@ class GiveawayEntry(discord.Embed):
             ignored = []
 
             for line in giveaway.splitlines():
-                line.strip()
+                line = line.strip()
                 checked = False
 
                 for key, check in checks.items():
                     if key not in ignored and (result := check(line)):
+                        # print(f"Check went through with {check.__name__}, line is {line}")
                         _data[key] = result
                         checked = True
                         ignored.append(key)
@@ -125,31 +136,55 @@ class GiveawayEntry(discord.Embed):
                 if not (_data.get("item") or checked):  # Item
                     _data["item"] = line
 
-            _data["platform_row"] = _data.pop("platform", "") + _data.pop("row", "")
+            if (plat := _data.get('plat')) and (row := _data.get('row')):
+                _data["author_header"] = f"{plat} | {row}"
+            elif plat or row:
+                _data["author_header"] = plat if plat else row
+            else:
+                _data["author_header"] = ""
 
             return _data
 
         self.data = giveaway_parser(giveaway_data)
         data = self.data
 
-        if not (time := self.data.get("date")):
+        if not (time := data.get("date")):
             raise GiveawayError("Missing date data!")
-        elif not (item := self.data.get("item")):
+        elif not (item := data.get("item")):
             raise GiveawayError("Misisng item data!")
 
         # Constructs the actual embed
         self.title = item
-        self.timestamp = time
-        self.description = "React with :tada: to join the giveaway!"
-        self.set_author(name=data["platform_row"])
-        if resc := self.data.get("resc"):
-            self.add_field(name="Restrictions:", value="\n".join(f"- {r}" for r in resc))
-        if donor := self.data.get("donor"):
-            self.add_field(name="Donator:", value=donor)
-        self.add_field(name="Hosted by:", value=ctx.author.mention, inline=False)
+        self.color = await ctx.bot.color(ctx)
+        self.description = f"{data.get('desc')}\n\n"
+        self.set_author(name=data["author_header"])
+        if resc := data.get("resc"):
+            resc = "\n".join(f"- {r}" for r in resc)
+        else:
+            resc = "None"
+        self.add_field(name="Restrictions:", value=resc, inline=False)
+        if donor := data.get("donor"):
+            if _ := ctx.guild.get_member_named(donor):
+                donor = _.mention
+            self.add_field(name="Donated by:", value=donor)
+        self.add_field(name="Hosted by:", value=ctx.author.mention)
 
-        time_left: datetime.timedelta = time - datetime.datetime.now()
-        self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left))
+        end_time = (
+            f"{time.strftime('%-I:%M %p')}, "
+            f"{time.strftime('%a %B')} "
+            f"{parse_ordinal(int(time.strftime('%d')))}, "
+            f"{time.strftime('%Y')}"
+        )
+        self.set_footer(text=f"Giveaway ends at {end_time} UTC")
+
+        sender = data.get('sender')
+        if _ := ctx.guild.get_member_named(sender):
+            sender = _.mention
+        self.add_field(name=f"React with :tada: to join the giveaway!",
+                       value=f"Contact user {sender} to get your items.", inline=False)
+
+        time_left: datetime.timedelta = time - datetime.datetime.utcnow()
+        self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left), inline=False)
 
         # If the time remaining for giveaway is lesser than the timer's next interval
         if time_left < datetime.timedelta(minutes=config.TIMER):
@@ -182,14 +217,6 @@ class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @staticmethod
-    # Thanks Olivia uwu
-    def parse_ordinal(num):
-        ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
-        if num in [11, 12, 13] or (place := ordinal.get(num % 10)) is None:
-            return f"{num}th"
-        return place
-
     # TODO: Make guild_ids sync with internal config system
     @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
                      guild_ids=config.guilds)
@@ -209,7 +236,7 @@ class Giveaway(commands.Cog):
         embed.add_field(name="**Total donated platinum:**", value=f"{row['plat']} platinum", inline=False)
         if row['title'] is not None:
             embed.add_field(name="**Current donator rank:**", value=f"{row['title']}")
-        embed.set_footer(text=f"{self.parse_ordinal(row['rank'])} place in leaderboard")
+        embed.set_footer(text=f"{parse_ordinal(row['rank'])} place in leaderboard")
 
         await ctx.send(embed=embed, hidden=hidden)
 
@@ -249,46 +276,54 @@ class Giveaway(commands.Cog):
             ctx.bot.disq(ctx.author)
         ctx.bot.disq(user)
 
-    @slash.cog_subcommand(base="giveaway", name="start", description="Start a new giveaway. (See help for more info)",
-                          guild_ids=config.guilds)
+    @commands.group(name="giveaway", aliases=["give", "g"])
     @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
-    async def give_start(self, ctx, giveaway_data, channel: discord.TextChannel = None):
+    async def giveaway(self, ctx):
+        """All giveaway-related commands."""
+        if not ctx.invoked_subcommand:
+            await ctx.send_help(self.giveaway)
+
+    @giveaway.command(name="start")
+    async def give_start(self, ctx, channel: typing.Optional[discord.TextChannel], *, giveaway_data):
         """
         Starts a giveaway on a given channel.
 
-        giveaway_data should be written like the following, split into rows:
-        Platform data w/ giveaway row (Optional),
-        Item name,
-        Restrictions (Either custom or keywords will be searched),
-        Description (Optional)
+        giveaway_data should have the following data:
+        - Ending time
+        - Platform data w/ giveaway row (Optional),
+        - Item name,
+        - Restrictions (Either custom or keywords will be searched),
+        - Description (Optional)
         """
 
-        async def giveaway():
-            return GiveawayEntry(ctx, giveaway_data)
+        giveaway = await self.bot.loop.run_in_executor(None, lambda: GiveawayEntry(ctx, giveaway_data))
 
-        giveaway = await self.bot.loop.run_in_executor(None, giveaway)
-
-        # TODO: insert (and convert) GiveawayEntry into SQLiteDB
         # TODO: Make this part of config, I guess?
-        config_msg = "__ :tada: Giveaway :tada: __"
+        config_msg = "**__ :tada: Giveaway :tada: __**"
 
-        if channel is None:
-            return await ctx.send(config_msg, embed=giveaway)
-        await channel.send(config_msg, embed=giveaway)
+        if channel is not None:
+            return await channel.send(config_msg, embed=giveaway)
+        await ctx.send(config_msg, embed=giveaway)
 
-    @slash.cog_subcommand(base="giveaway", name="reroll", description="Reroll a finished giveaway.",
-                          guild_ids=config.guilds)
-    @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
+        """
+                async with aiosqlite.connect(config.DATABASE_NAME) as db:
+            try:
+                await db.execute("INSERT INTO giveaways VALUES (?, ?, ?, ?)",
+                                 (ctx.guild_id, giveaway.time.timestamp(), giveaway.data.get("row"), giveaway))
+                await db.commit()
+            except aiosqlite.DatabaseError:     # Should raise if it breaks a UNIQUE constraint?
+                raise GiveawayError(f"Giveaway {giveaway.data['row']} already exists!")
+        """
+
+    @giveaway.command(name="reroll")
     async def give_reroll(self, ctx, giveaway_id: int):
         pass
 
-    @slash.cog_subcommand(base="giveaway", name="end", description="End an existing giveaway.", guild_ids=config.guilds)
+    @giveaway.command(name="end")
     async def give_end(self, ctx, giveaway_id: int):
         pass
 
-    @slash.cog_subcommand(base="giveaway", name="edit",
-                          description="Edit an existing giveaway's duration or restriction(s).",
-                          guild_ids=config.guilds, )
+    @giveaway.command(name="edit")
     async def give_edit(self, ctx, giveaway_id: int):
         pass
 

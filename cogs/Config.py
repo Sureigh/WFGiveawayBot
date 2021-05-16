@@ -23,7 +23,7 @@ class Config(commands.Cog):
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
                 async with db.execute(f"""
                     SELECT {_value} FROM config
-                    WHERE guild = {ctx.guild_id};
+                    WHERE guild = {ctx.guild.id};
                 """) as cursor:
                     result = await cursor.fetchone()
 
@@ -119,7 +119,7 @@ class Config(commands.Cog):
                     CREATE TABLE IF NOT EXISTS giveaways (
                         guild INTEGER NOT NULL,
                         end REAL NOT NULL,
-                        giveaway_id TEXT NOT NULL, 
+                        giveaway_id TEXT, 
                         giveaway BLOB NOT NULL,
                         UNIQUE(guild, giveaway_id)
                     );
