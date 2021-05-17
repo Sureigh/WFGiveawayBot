@@ -11,7 +11,7 @@ from discord.ext import commands
 from discord_slash import cog_ext as slash
 import humanfriendly
 
-import config
+import configs
 from errors import GiveawayError
 
 
@@ -187,7 +187,7 @@ class GiveawayEntry(discord.Embed):
         self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left), inline=False)
 
         # If the time remaining for giveaway is lesser than the timer's next interval
-        if time_left < datetime.timedelta(minutes=config.TIMER):
+        if time_left < datetime.timedelta(minutes=configs.TIMER):
             pass
             # TODO: Add giveaway to end of giveaway queue
             #  if the time is shorter than that, however, just run it as its own task
@@ -219,7 +219,7 @@ class Giveaway(commands.Cog):
 
     # TODO: Make guild_ids sync with internal config system
     @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
-                     guild_ids=config.guilds)
+                     guild_ids=configs.guilds)
     async def plat_count(self, ctx):
         bot = ctx.bot
         hidden = await bot.hidden(ctx)
@@ -241,18 +241,18 @@ class Giveaway(commands.Cog):
         await ctx.send(embed=embed, hidden=hidden)
 
     @slash.cog_slash(name="donation", description="Fill out a donation form to donate your items.",
-                     guild_ids=config.guilds)
+                     guild_ids=configs.guilds)
     async def donation(self, ctx):
         pass
 
     @slash.cog_subcommand(base="disqualify", name="user", description="Disqualify a user from joining giveaways.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_user(self, ctx, user: discord.Member, duration, reason=None):
         pass
 
     @slash.cog_subcommand(base="disqualify", name="check", description="Check a user's disqualification history.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
         """
@@ -269,7 +269,7 @@ class Giveaway(commands.Cog):
 
     @slash.cog_subcommand(base="disqualify", name="time",
                           description="Check how long until you or a user is re-eligible for giveaways.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     async def disq_time(self, ctx, user: discord.Member = None):
         # This should return a timedelta? iunno lol
         if user is None:

@@ -4,12 +4,12 @@
 from discord_slash import SlashCommand
 from discord.ext import commands
 import discord
-import config
+import configs
 
 # !! IMPORTANT !!
 # Load Error first every time; It has custom errors that other cogs depend on, and handles errors too
 # TODO: so where them custom errors at homie
-COGS = ["Error", "Config", "General", "Giveaway", "Sheet", "Timers"]
+COGS = ["error", "config", "general", "giveaway", "sheet", "timers"]
 
 
 class Bot(commands.Bot):
@@ -38,4 +38,4 @@ class Bot(commands.Bot):
 bot = Bot()
 
 if __name__ == "__main__":
-    bot.run(config.TOKEN)
+    bot.run(configs.TOKEN)

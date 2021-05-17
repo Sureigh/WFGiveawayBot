@@ -25,7 +25,7 @@ var/
 *.egg
 
 # Our configuration files
-config.py
+configs.py
 venv/
 *.json
 *.db

@@ -6,7 +6,7 @@ from google.oauth2 import service_account
 from discord.ext import commands
 from discord_slash import cog_ext as slash
 
-import config
+import configs
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
@@ -22,7 +22,7 @@ class Sheet(commands.Cog):
             def grab_sheet():
                 service = build(
                     'sheets', 'v4',
-                    credentials=service_account.Credentials.from_service_account_file(config.GOOGLE_API_CREDS,
+                    credentials=service_account.Credentials.from_service_account_file(configs.GOOGLE_API_CREDS,
                                                                                       scopes=SCOPES)
                 )
                 result = service.spreadsheets().values().batchGet(
@@ -38,7 +38,7 @@ class Sheet(commands.Cog):
             values = [(int(*user), int(*plat), rank, str(*title))
                       for rank, (user, plat, title) in enumerate(zip(*values), start=1)]
 
-            async with aiosqlite.connect(config.DATABASE_NAME) as db:
+            async with aiosqlite.connect(configs.DATABASE_NAME) as db:
                 await db.executemany("""
                             INSERT INTO sheet
                             VALUES (?, ?, ?, ?)
@@ -50,7 +50,7 @@ class Sheet(commands.Cog):
         bot.cache_sheet = cache_sheet
 
     @slash.cog_slash(name="update_sheet", description="Force updates the cached spreadsheet.",
-                     guild_ids=config.guilds)
+                     guild_ids=configs.guilds)
     async def update_sheet(self, ctx):
         hidden = await ctx.bot.hidden(ctx)
         await ctx.defer(hidden)

@@ -5,8 +5,8 @@ from discord_slash import cog_ext as slash
 import discord
 import aiosqlite
 
-import config
-from config import DATABASE_NAME
+import configs
+from configs import DATABASE_NAME
 
 
 class Config(commands.Cog):
@@ -21,6 +21,7 @@ class Config(commands.Cog):
                 # Yes, I know I could use ? instead.
                 # Yes, I tried it.
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
+                # P.S: Fuck you, Lyric
                 async with db.execute(f"""
                     SELECT {_value} FROM config
                     WHERE guild = {ctx.guild.id};
@@ -154,7 +155,7 @@ class Config(commands.Cog):
         bot.loop.create_task(async_init())
 
     @slash.cog_slash(name="config", description="Edit command configurations for the bot.",
-                     guild_ids=config.guilds)
+                     guild_ids=configs.guilds)
     @commands.has_guild_permissions(manage_messages=True)
     async def config(self, ctx):
         pass

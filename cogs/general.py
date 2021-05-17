@@ -7,7 +7,7 @@ from discord_slash.utils import manage_commands
 import aiosqlite
 import asyncio
 
-import config
+import configs
 
 
 class General(commands.Cog):
@@ -56,8 +56,9 @@ class General(commands.Cog):
     # Actual logic of custom commands
     option = manage_commands.create_option("Hidden", "Send reply hidden.", bool, False)
 
-    async def cmd_template(self, ctx, hidden=None):
-        async with aiosqlite.connect(config.DATABASE_NAME) as db:
+    @staticmethod
+    async def cmd_template(ctx, hidden=None):
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
             async with db.execute("SELECT resp FROM cmds WHERE name=?", (ctx.name,)) as _result:
                 await ctx.send(*await _result.fetchone(), hidden=bool(hidden))
 
@@ -65,7 +66,7 @@ class General(commands.Cog):
         """Loads custom commands into the bot."""
         await self.bot.wait_until_ready()
 
-        async with aiosqlite.connect(config.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
             # Add all commands
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM cmds") as cursor:
@@ -92,7 +93,7 @@ class General(commands.Cog):
                 await db.commit()
 
     @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
     async def command_create(self, ctx, name, response, description=None):
         if len(name) > 32:
@@ -105,7 +106,7 @@ class General(commands.Cog):
         # TODO: add a configurable amount of custom commands per donator,
         #  and then check that a donator has not surpassed that amount
 
-        async with aiosqlite.connect(config.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
             # Checks if command already exists
             async with db.execute("SELECT * FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id)) as cursor:
                 result = await cursor.fetchone()
@@ -132,13 +133,13 @@ class General(commands.Cog):
                              (name, response, description, ctx.author_id, ctx.guild_id, resp["id"]))
             await db.commit()
 
-        self.bot.slash.add_slash_command(self.cmd_template, name, description, config.guilds, [self.option])
+        self.bot.slash.add_slash_command(self.cmd_template, name, description, configs.guilds, [self.option])
         await ctx.send(f"Command with name '{name}' successfully created.")
 
     @slash.cog_subcommand(base="command", name="remove", description="Remove an existing custom command.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     async def command_remove(self, ctx, name):
-        async with aiosqlite.connect(config.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
             async with db.execute("SELECT user, cmd_id FROM cmds WHERE name=? AND guild_id=?",
                                   (name, ctx.guild_id)) as cursor:
                 owner, cmd_id = await cursor.fetchone()
@@ -152,7 +153,7 @@ class General(commands.Cog):
 
     @slash.cog_subcommand(base="command", name="update",
                           description="Update an existing custom command's name, response and/or description.",
-                          guild_ids=config.guilds)
+                          guild_ids=configs.guilds)
     async def update_command(self, ctx, current_name, name=None, response=None, description=None):
         pass
 
