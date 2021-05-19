@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import datetime  # More like, datetorture
 import pickle
+import random
 import re
 import typing
 
@@ -30,8 +31,33 @@ def parse_ordinal(num):
 class GiveawayEntry(discord.Embed):
     """Each instance is supposed to represent a giveaway entry in a server."""
 
-    def __init__(self, ctx, giveaway_data, **kwargs):
-        super().__init__(**kwargs)
+    @staticmethod
+    def giveaway_parser(giveaway: str) -> dict:
+        """
+        giveaway_data should be written like the following split into rows:
+        Date, Platform data w/ giveaway row (Optional), [This can be split into two rows, too]
+        Item name,
+        Restrictions (Either custom or keywords will be searched),
+        Donators,
+        Description (Optional)
+
+        Example data:
+        4d PC | R3186
+        5k Platinum
+        Restrictions: 400-1000 in game hours, Less than 1500 plat balance, 2.5 Mil credits for the trade tax.
+        Donated By: SomeUser#1234
+        Contact OtherUser#3456 for Pickup
+
+        Raw data returned should be:
+            - Date
+            - Platform
+            - Row number (merged with above into author heading)
+            - Item
+            - Restrictions
+            - Donor
+            - Sender
+            - Description
+        """
 
         def date_parser(date: str) -> datetime.datetime:
             """
@@ -48,114 +74,90 @@ class GiveawayEntry(discord.Embed):
             week += month * 4.345  # haha yes no month signifiers in timedelta
             return datetime.datetime.utcnow() + datetime.timedelta(weeks=week, days=day, minutes=minute, seconds=second)
 
-        def giveaway_parser(giveaway: str) -> dict:
-            """
-            giveaway_data should be written like the following split into rows:
-            Date, Platform data w/ giveaway row (Optional), [This can be split into two rows, too]
-            Item name,
-            Restrictions (Either custom or keywords will be searched),
-            Donators,
-            Description (Optional)
+        # TODO: Replace anything starting with config_ and put in bot config
+        _data = {}
+        config_row_signifier = "R"
+        config_platforms = ["PC", "Xbox", "Switch", "PS4"]
+        config_keywords = {"donor": ["donor", "donate"],
+                           "sender": ["sender", "pickup", "contact"]}
 
-            Example data:
-            4d PC | R3186
-            5k Platinum
-            Restrictions: 400-1000 in game hours, Less than 1500 plat balance, 2.5 Mil credits for the trade tax.
-            Donated By: SomeUser#1234
-            Contact OtherUser#3456 for Pickup
+        # Thanks snek uwu
+        def check_date(_line):
+            if m := re.search(r"\d+\s*?(?:mo|[wdms])", _line, flags=re.I):
+                if datetime.datetime.utcnow() < (_time := date_parser(m[0])):
+                    return _time
 
-            Raw data returned should be:
-                - Date
-                - Platform
-                - Row number (merged with above into author heading)
-                - Item
-                - Restrictions
-                - Donor
-                - Sender
-                - Description
-            """
-            # TODO: Replace anything starting with config_ and put in bot config
-            _data = {}
-            config_row_signifier = "R"
-            config_platforms = ["PC", "Xbox", "Switch", "PS4"]
-            config_keywords = {"donor": ["donor", "donate"],
-                               "sender": ["sender", "pickup", "contact"]}
+        def check_plat(_line):
+            if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", _line, flags=re.I):
+                return {p.lower(): p for p in config_platforms}[m[1].lower()]
 
-            # Thanks snek uwu
-            def check_date(_line):
-                if m := re.search(r"\d+\s*?(?:mo|[wdms])", _line, flags=re.I):
-                    if datetime.datetime.utcnow() < (_time := date_parser(m[0])):
-                        return _time
+        def check_row(_line):
+            if m := re.search(rf"(?<!\w){config_row_signifier}\d+", _line, flags=re.I):
+                return m[0]
 
-            def check_plat(_line):
-                if m := re.search(rf"(?:^|\s)({'|'.join(config_platforms)})", _line, flags=re.I):
-                    return {p.lower(): p for p in config_platforms}[m[1].lower()]
+        def check_resc(_line):
+            if m := re.search(r"restrict[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
+                return m[1].strip().split(",")
 
-            def check_row(_line):
-                if m := re.search(rf"(?<!\w){config_row_signifier}\d+", _line, flags=re.I):
-                    return m[0]
+        def check_donor(_line):
+            if m := re.search(rf"(?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+)", _line, flags=re.I):
+                return m[1]
 
-            def check_resc(_line):
-                if m := re.search(r"restrict[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
-                    return m[1].strip().split(",")
+        def check_sender(_line):
+            if m := re.search(rf"(?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+)", _line, flags=re.I):
+                return m[1]
 
-            def check_donor(_line):
-                if m := re.search(rf"(?:{'|'.join(config_keywords['donor'])}).*?(\w+#\d+)", _line, flags=re.I):
-                    return m[1]
+        def check_desc(_line):
+            if m := re.search(rf"desc[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
+                return m[1].strip()
 
-            def check_sender(_line):
-                if m := re.search(rf"(?:{'|'.join(config_keywords['sender'])}).*?(\w+#\d+)", _line, flags=re.I):
-                    return m[1]
+        checks = {
+            'date': check_date,
+            'plat': check_plat,
+            'row': check_row,
+            'resc': check_resc,
+            'donor': check_donor,
+            'sender': check_sender,
+            'desc': check_desc
+        }
+        ignored = []
 
-            def check_desc(_line):
-                if m := re.search(rf"desc[\w\s]*[\s:-]*(.+)", _line, flags=re.I):
-                    return m[1].strip()
+        for line in giveaway.splitlines():
+            line = line.strip()
+            checked = False
 
-            checks = {
-                'date': check_date,
-                'plat': check_plat,
-                'row': check_row,
-                'resc': check_resc,
-                'donor': check_donor,
-                'sender': check_sender,
-                'desc': check_desc
-            }
-            ignored = []
+            for key, check in checks.items():
+                if key not in ignored and (result := check(line)):
+                    # print(f"Check went through with {check.__name__}, line is {line}")
+                    _data[key] = result
+                    checked = True
+                    ignored.append(key)
 
-            for line in giveaway.splitlines():
-                line = line.strip()
-                checked = False
+            if not (_data.get("item") or checked):  # Item
+                _data["item"] = line
 
-                for key, check in checks.items():
-                    if key not in ignored and (result := check(line)):
-                        # print(f"Check went through with {check.__name__}, line is {line}")
-                        _data[key] = result
-                        checked = True
-                        ignored.append(key)
+        if (plat := _data.get('plat')) and (row := _data.get('row')):
+            _data["author_header"] = f"{plat} | {row}"
+        elif plat or row:
+            _data["author_header"] = plat if plat else row
+        else:
+            _data["author_header"] = ""
 
-                if not (_data.get("item") or checked):  # Item
-                    _data["item"] = line
+        return _data
 
-            if (plat := _data.get('plat')) and (row := _data.get('row')):
-                _data["author_header"] = f"{plat} | {row}"
-            elif plat or row:
-                _data["author_header"] = plat if plat else row
-            else:
-                _data["author_header"] = ""
-
-            return _data
-
-        self.data = giveaway_parser(giveaway_data)
+    def __init__(self, ctx: discord.Context, giveaway_data, **kwargs):
+        super().__init__(**kwargs)
+        self.color = discord.Color.blurple()  # Old blurple best blurple
+        self.data = self.giveaway_parser(giveaway_data)
         data = self.data
 
         if not (time := data.get("date")):
             raise GiveawayError("Missing date data!")
         elif not (item := data.get("item")):
-            raise GiveawayError("Misisng item data!")
+            raise GiveawayError("Missing item data!")
 
         # Constructs the actual embed
         self.title = item
-        self.color = await ctx.bot.color(ctx)
         self.description = f"{data.get('desc')}\n\n"
         self.set_author(name=data["author_header"])
         if resc := data.get("resc"):
@@ -186,14 +188,18 @@ class GiveawayEntry(discord.Embed):
         time_left: datetime.timedelta = time - datetime.datetime.utcnow()
         self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left), inline=False)
 
+        # We'll need to access these outside later :RemVV:
+        self.ctx = ctx
+        self.time = time.timestamp()
+        self.row = data.get("row")
+        self.users = 0
+
         # If the time remaining for giveaway is lesser than the timer's next interval
+        # If not (which should be most cases) it will shelve the giveaway on the SQL db
         if time_left < datetime.timedelta(minutes=configs.TIMER):
             pass
             # TODO: Add giveaway to end of giveaway queue
             #  if the time is shorter than that, however, just run it as its own task
-        # If not (which should be most cases) it will shelve the giveaway on the SQL db
-        else:
-            pass
 
     def __conform__(self, protocol):
         """Adapts giveaway data so that it may be safely stored by the sqlite database."""
@@ -203,6 +209,27 @@ class GiveawayEntry(discord.Embed):
         """Edits the giveaway's information."""
         # TODO
         pass
+
+    def end(self):
+        """Ends the giveaway."""
+        # TODO: something something configurable emojis
+        for r in self.ctx.message.reactions:
+            if str(r) == ":tada:":
+                now = datetime.datetime.utcnow().timestamp()
+                async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+                    async with await db.execute("""
+                        SELECT user FROM disq WHERE guild = ? AND disq_end > ?;
+                    """, (self.ctx.guild.id, now)) as cursor:
+                        _ = [e[0] async for e in cursor]
+
+                    users = [u async for u in r.users() if u.id not in _]
+                    # TODO: Apply all possible checks here
+
+                    user = random.choice(users)
+                    # TODO: Mention their name, change color, display final user count on embed
+
+                    await db.execute("UPDATE giveaways SET ended = 1 WHERE giveaway = ?", (self,))
+                    await db.commit()
 
 
 # TODO: fun fact checks (might) be fucked, find out if they actually are lmao
@@ -295,36 +322,40 @@ class Giveaway(commands.Cog):
         - Restrictions (Either custom or keywords will be searched),
         - Description (Optional)
         """
+        async with ctx.typing():
+            # Potentially blocking? Just in case, right?
+            giveaway = await self.bot.loop.run_in_executor(
+                None, lambda: GiveawayEntry(ctx, giveaway_data)
+            )
 
-        giveaway = await self.bot.loop.run_in_executor(None, lambda: GiveawayEntry(ctx, giveaway_data))
+            # TODO: Make this part of config
+            config_msg = "**__ :tada: Giveaway :tada: __**"
 
-        # TODO: Make this part of config, I guess?
-        config_msg = "**__ :tada: Giveaway :tada: __**"
+            async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+                try:
+                    await db.execute("INSERT INTO giveaways VALUES (?, ?, ?, ?)",
+                                     (ctx.guild.id, giveaway, giveaway.time, giveaway.row))
+                    await db.commit()
+                except aiosqlite.DatabaseError:  # Should raise if it breaks a UNIQUE constraint?
+                    raise GiveawayError(f"Giveaway {giveaway.row} already exists!")
 
         if channel is not None:
             return await channel.send(config_msg, embed=giveaway)
         await ctx.send(config_msg, embed=giveaway)
 
-        """
-                async with aiosqlite.connect(config.DATABASE_NAME) as db:
-            try:
-                await db.execute("INSERT INTO giveaways VALUES (?, ?, ?, ?)",
-                                 (ctx.guild_id, giveaway.time.timestamp(), giveaway.data.get("row"), giveaway))
-                await db.commit()
-            except aiosqlite.DatabaseError:     # Should raise if it breaks a UNIQUE constraint?
-                raise GiveawayError(f"Giveaway {giveaway.data['row']} already exists!")
-        """
-
     @giveaway.command(name="reroll")
     async def give_reroll(self, ctx, giveaway_id: int):
+        """Reroll the winner of a giveaway that has already ended."""
         pass
 
     @giveaway.command(name="end")
     async def give_end(self, ctx, giveaway_id: int):
+        """Force a giveaway to end immediately."""
         pass
 
     @giveaway.command(name="edit")
     async def give_edit(self, ctx, giveaway_id: int):
+        """Edit an existing giveaway's data."""
         pass
 
     # TODO: print a copy of the ongoing giveaway, with labels on each part of the giveaway, then ask for what to edit

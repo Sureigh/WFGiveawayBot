@@ -33,8 +33,7 @@ class Sheet(commands.Cog):
                 return result.get("valueRanges")
 
             # Thanks Ava :verycool:
-            values = await self.bot.loop.run_in_executor(None, grab_sheet)
-            values = [value.get("values") for value in values]
+            values = [value.get("values") for value in await self.bot.loop.run_in_executor(None, grab_sheet)]
             values = [(int(*user), int(*plat), rank, str(*title))
                       for rank, (user, plat, title) in enumerate(zip(*values), start=1)]
 

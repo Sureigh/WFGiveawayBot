@@ -119,10 +119,11 @@ class Config(commands.Cog):
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
                         guild INTEGER NOT NULL,
-                        end REAL NOT NULL,
-                        giveaway_id TEXT, 
                         giveaway BLOB NOT NULL,
-                        UNIQUE(guild, giveaway_id)
+                        g_end REAL NOT NULL,
+                        g_id TEXT, 
+                        ended INTEGER DEFAULT 0
+                        UNIQUE(guild, g_id)
                     );
                 """)
                 # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY
@@ -138,9 +139,10 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS disq (
-                        guild INTEGER,
-                        user INTEGER, 
-                        duration TIMESTAMP
+                        guild INTEGER NOT NULL,
+                        user INTEGER NOT NULL,
+                        disq_start REAL NOT NULL,
+                        disq_end REAL NOT NULL
                     );
                 """)
                 await db.execute("""
