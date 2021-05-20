@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import pickle
+from sqlite3 import PARSE_DECLTYPES
+
+import aiosqlite
+import discord
 from discord.ext import commands
 from discord_slash import cog_ext as slash
-import discord
-import aiosqlite
 
 import configs
 from configs import DATABASE_NAME
@@ -15,9 +18,12 @@ class Config(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        # Custom GiveawayEntry object
+        aiosqlite.register_converter("GIVEAWAY", lambda x: pickle.loads(x))
+
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
         async def fetch(ctx, _value):
-            async with aiosqlite.connect(DATABASE_NAME) as db:
+            async with aiosqlite.connect(DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
                 # Yes, I know I could use ? instead.
                 # Yes, I tried it.
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
@@ -119,10 +125,10 @@ class Config(commands.Cog):
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS giveaways (
                         guild INTEGER NOT NULL,
-                        giveaway BLOB NOT NULL,
+                        giveaway GIVEAWAY NOT NULL,
                         g_end REAL NOT NULL,
                         g_id TEXT, 
-                        ended INTEGER DEFAULT 0
+                        ended INTEGER DEFAULT 0,
                         UNIQUE(guild, g_id)
                     );
                 """)
@@ -142,7 +148,8 @@ class Config(commands.Cog):
                         guild INTEGER NOT NULL,
                         user INTEGER NOT NULL,
                         disq_start REAL NOT NULL,
-                        disq_end REAL NOT NULL
+                        disq_end REAL NOT NULL,
+                        reason TEXT
                     );
                 """)
                 await db.execute("""
@@ -153,7 +160,13 @@ class Config(commands.Cog):
                         title TEXT
                     );
                 """)
-
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS prefixes (
+                        guild INTEGER NOT NULL,
+                        prefix TEXT NOT NULL DEFAULT "g?"
+                    );
+                """)
+                await db.commit()
         bot.loop.create_task(async_init())
 
     @slash.cog_slash(name="config", description="Edit command configurations for the bot.",

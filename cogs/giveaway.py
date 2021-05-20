@@ -15,7 +15,6 @@ import humanfriendly
 import configs
 from errors import GiveawayError
 
-
 # Thanks Olivia uwu
 def parse_ordinal(num):
     ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
@@ -145,7 +144,7 @@ class GiveawayEntry(discord.Embed):
 
         return _data
 
-    def __init__(self, ctx: discord.Context, giveaway_data, **kwargs):
+    def __init__(self, ctx: commands.Context, giveaway_data, **kwargs):
         super().__init__(**kwargs)
         self.color = discord.Color.blurple()  # Old blurple best blurple
         self.data = self.giveaway_parser(giveaway_data)
@@ -210,23 +209,34 @@ class GiveawayEntry(discord.Embed):
         # TODO
         pass
 
-    def end(self):
+    async def end(self):
         """Ends the giveaway."""
         # TODO: something something configurable emojis
         for r in self.ctx.message.reactions:
             if str(r) == ":tada:":
-                now = datetime.datetime.utcnow().timestamp()
+                now = datetime.datetime.utcnow()
                 async with aiosqlite.connect(configs.DATABASE_NAME) as db:
                     async with await db.execute("""
                         SELECT user FROM disq WHERE guild = ? AND disq_end > ?;
-                    """, (self.ctx.guild.id, now)) as cursor:
+                    """, (self.ctx.guild.id, now.timestamp())) as cursor:
                         _ = [e[0] async for e in cursor]
 
-                    users = [u async for u in r.users() if u.id not in _]
+                    # Remove non eligible participants
                     # TODO: Apply all possible checks here
+                    users = [u async for u in r.users() if u.id not in _]
 
-                    user = random.choice(users)
+                    # Edit embed and handle ending
                     # TODO: Mention their name, change color, display final user count on embed
+                    # TODO: Configurable win phrases.
+                    user = random.choice(users)
+
+                    end_time = (
+                        f"{now.strftime('%-I:%M %p')}, "
+                        f"{now.strftime('%a %B')} "
+                        f"{parse_ordinal(int(now.strftime('%d')))}, "
+                        f"{now.strftime('%Y')}"
+                    )
+                    self.set_footer(text=f"Giveaway ended at {end_time} UTC")
 
                     await db.execute("UPDATE giveaways SET ended = 1 WHERE giveaway = ?", (self,))
                     await db.commit()
@@ -344,17 +354,17 @@ class Giveaway(commands.Cog):
         await ctx.send(config_msg, embed=giveaway)
 
     @giveaway.command(name="reroll")
-    async def give_reroll(self, ctx, giveaway_id: int):
+    async def give_reroll(self, ctx, giveaway_id: discord.Message):
         """Reroll the winner of a giveaway that has already ended."""
         pass
 
     @giveaway.command(name="end")
-    async def give_end(self, ctx, giveaway_id: int):
+    async def give_end(self, ctx, giveaway_id: discord.Message):
         """Force a giveaway to end immediately."""
         pass
 
     @giveaway.command(name="edit")
-    async def give_edit(self, ctx, giveaway_id: int):
+    async def give_edit(self, ctx, giveaway_id: discord.Message):
         """Edit an existing giveaway's data."""
         pass
 

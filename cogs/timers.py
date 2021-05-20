@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from discord.ext import commands, tasks
+from sqlite3 import PARSE_DECLTYPES
 import aiosqlite
 import datetime
 
@@ -14,7 +15,7 @@ class Timers(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # bot.loop.run_until_complete(self.check_expired_giveaways())
+        # TODO: bot.loop.run_until_complete(self.check_expired_giveaways())
         self.check_timers.start()
 
     def cog_unload(self):
@@ -26,9 +27,9 @@ class Timers(commands.Cog):
         Although rare, a bot outage is definitely a possibility.
         This method tries to check if any past giveaways that should have ended is not ended, and will forcibly do so.
         ""
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
             async with db.execute(
-                "SELECT giveaway FROM giveaways WHERE ? > end AND ended = 0 ORDER BY end ASC;",
+                "SELECT giveaway FROM giveaways WHERE ? > g_end AND ended = 0 ORDER BY end ASC;",
                 (datetime.datetime.utcnow().timestamp(),)
             ) as cursor:
                 async for g in cursor:
@@ -44,7 +45,7 @@ class Timers(commands.Cog):
         await bot.cache_sheet()
 
         # Giveaway timer check
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
             db.row_factory = aiosqlite.Row
 
             async def giveaway(_now, _later, g):
@@ -57,11 +58,11 @@ class Timers(commands.Cog):
                 now = datetime.datetime.utcnow()
                 later = now + datetime.timedelta(minutes=configs.TIMER * 1.25)
                 async with db.execute("""
-                    SELECT * FROM giveaways WHERE end BETWEEN ? AND ? AND ended = 0 AND guild = ? ORDER BY end ASC;
+                    SELECT * FROM giveaways WHERE g_end BETWEEN ? AND ? AND ended = 0 AND guild = ? ORDER BY g_end ASC;
                 """, (now.timestamp(), later.timestamp(), guild.id)) as cursor:
                     # TODO: I have no idea how efficient this is, could go back to original idea if it sucks
-                    await asyncio.gather(giveaway(now.timestamp(), row["g_end"], row["giveaway"])
-                                         async for row in cursor)
+                    await asyncio.gather(*[giveaway(now.timestamp(), row["g_end"], row["giveaway"])
+                                           async for row in cursor])
 
         # Disqualified timer check
         # TODO: Same as above

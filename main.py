@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from discord_slash import SlashCommand
-from discord.ext import commands
+import aiosqlite
 import discord
+from discord.ext import commands
+from discord_slash import SlashCommand
+
 import configs
 
 # !! IMPORTANT !!
@@ -12,18 +14,30 @@ import configs
 COGS = ["error", "config", "general", "giveaway", "sheet", "timers"]
 
 
+async def prefix(_bot, message):
+    async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+        async with db.execute("SELECT prefix FROM prefixes WHERE guild = ?;", (message.guild.id,)) as c:
+            _prefix = await c.fetchone()
+            await c.close()
+
+            if _prefix is None:
+                await db.execute("INSERT INTO prefixes (guild) VALUES (?);", (message.guild.id,))
+                await db.commit()
+                return await prefix(_bot, message)
+
+    return commands.when_mentioned_or(*_prefix)(_bot, message)
+
 class Bot(commands.Bot):
     def __init__(self, **kwargs):
         intents = discord.Intents.default()
         intents.members = True
-        super().__init__(command_prefix=commands.when_mentioned, intents=intents, **kwargs)
+        super().__init__(command_prefix=prefix, intents=intents, **kwargs)
 
         # SLASH COMMANDS
         # DISGUSTING
         self.slash = SlashCommand(self, override_type=True, sync_commands=True)
 
         self.load_extension('jishaku')
-
         for cog in COGS:
             try:
                 self.load_extension(f"cogs.{cog}")
