@@ -7,9 +7,7 @@ import typing
 
 import aiosqlite
 import discord
-import discord_slash
 from discord.ext import commands
-from discord_slash import cog_ext as slash
 import humanfriendly
 
 import configs
@@ -225,11 +223,11 @@ class GiveawayEntry(discord.Embed):
                     # TODO: Apply all possible checks here
                     users = [u async for u in r.users() if u.id not in _]
 
-                    # Edit embed and handle ending
-                    # TODO: Mention their name, change color, display final user count on embed
+                    # Congratulate user
                     # TODO: Configurable win phrases.
                     user = random.choice(users)
 
+                    # Edit embed and handle ending
                     end_time = (
                         f"{now.strftime('%-I:%M %p')}, "
                         f"{now.strftime('%a %B')} "
@@ -237,8 +235,13 @@ class GiveawayEntry(discord.Embed):
                         f"{now.strftime('%Y')}"
                     )
                     self.set_footer(text=f"Giveaway ended at {end_time} UTC")
+                    self.add_field(name="This giveaway has ended.",
+                                   value=f"Final user count: {len(users)}", inline=False)
+                    self.color = discord.Color.darker_gray()
+                    await self.ctx.message.edit(embed=self)
 
-                    await db.execute("UPDATE giveaways SET ended = 1 WHERE giveaway = ?", (self,))
+                    await db.execute("UPDATE giveaways SET ended = 1 WHERE guild = ? and g_end = ?",
+                                     (self.ctx.guild.id, self.time))
                     await db.commit()
 
 
@@ -254,14 +257,9 @@ class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # TODO: Make guild_ids sync with internal config system
-    @slash.cog_slash(name="plat", description="Check how much plat you've donated to the server.",
-                     guild_ids=configs.guilds)
-    async def plat_count(self, ctx):
+    @commands.command(name="plat", description="Check how much plat you've donated to the server.")
+    async def plat(self, ctx):
         bot = ctx.bot
-        hidden = await bot.hidden(ctx)
-        await ctx.defer(hidden)
-
         # Fails if the user ID is not on the sheet
         if (row := await bot.value(ctx)) is None:
             await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?", hidden=hidden)
@@ -275,21 +273,23 @@ class Giveaway(commands.Cog):
             embed.add_field(name="**Current donator rank:**", value=f"{row['title']}")
         embed.set_footer(text=f"{parse_ordinal(row['rank'])} place in leaderboard")
 
-        await ctx.send(embed=embed, hidden=hidden)
+        await ctx.send(embed=embed)
 
-    @slash.cog_slash(name="donation", description="Fill out a donation form to donate your items.",
-                     guild_ids=configs.guilds)
+    @commands.command(name="donation", description="Fill out a donation form to donate your items.")
     async def donation(self, ctx):
         pass
 
-    @slash.cog_subcommand(base="disqualify", name="user", description="Disqualify a user from joining giveaways.",
-                          guild_ids=configs.guilds)
+    # Disqualify
+    @commands.group(name="disqualify", aliases=["disq", "d"])
+    async def disq(self):
+        pass
+
+    @disq.commands(name="user", aliases=["u"], description="Disqualify a user from joining giveaways.")
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_user(self, ctx, user: discord.Member, duration, reason=None):
         pass
 
-    @slash.cog_subcommand(base="disqualify", name="check", description="Check a user's disqualification history.",
-                          guild_ids=configs.guilds)
+    @disq.commands(name="check", aliases=["c"], description="Check a user's disqualification history.")
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
         """
@@ -304,23 +304,23 @@ class Giveaway(commands.Cog):
         if not self.bot.disq(user):
             return await ctx.send("User has not been disqualified on this server yet.")
 
-    @slash.cog_subcommand(base="disqualify", name="time",
-                          description="Check how long until you or a user is re-eligible for giveaways.",
-                          guild_ids=configs.guilds)
+    @disq.commands(name="time", aliases=["t"],
+                   description="Check how long until you or a user is re-eligible for giveaways.")
     async def disq_time(self, ctx, user: discord.Member = None):
         # This should return a timedelta? iunno lol
         if user is None:
             ctx.bot.disq(ctx.author)
         ctx.bot.disq(user)
 
+    # Giveaway
     @commands.group(name="giveaway", aliases=["give", "g"])
     @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
-    async def giveaway(self, ctx):
+    async def give(self, ctx):
         """All giveaway-related commands."""
         if not ctx.invoked_subcommand:
-            await ctx.send_help(self.giveaway)
+            await ctx.send_help(self.give)
 
-    @giveaway.command(name="start")
+    @give.command(name="start", aliases=["s"])
     async def give_start(self, ctx, channel: typing.Optional[discord.TextChannel], *, giveaway_data):
         """
         Starts a giveaway on a given channel.
@@ -353,18 +353,20 @@ class Giveaway(commands.Cog):
             return await channel.send(config_msg, embed=giveaway)
         await ctx.send(config_msg, embed=giveaway)
 
-    @giveaway.command(name="reroll")
+    # TODO: Although we're keeping this for archaic reasons,
+    #  add in an option to be able to click a check on the finished giveaway.
+    @give.command(name="reroll", aliases=["roll", "r"])
     async def give_reroll(self, ctx, giveaway_id: discord.Message):
         """Reroll the winner of a giveaway that has already ended."""
         pass
 
-    @giveaway.command(name="end")
+    @give.command(name="end", aliases=["e"])
     async def give_end(self, ctx, giveaway_id: discord.Message):
         """Force a giveaway to end immediately."""
         pass
 
-    @giveaway.command(name="edit")
-    async def give_edit(self, ctx, giveaway_id: discord.Message):
+    @give.command(name="edit")
+    async def give_edit(self, ctx, giveaway_id: discord.Message, *, giveaway_data):
         """Edit an existing giveaway's data."""
         pass
 

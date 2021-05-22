@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
+import typing
+import pickle
+
 import discord
 from discord.ext import commands
-from discord_slash import cog_ext as slash
-from discord_slash.utils import manage_commands
-
 import aiosqlite
 import asyncio
 
@@ -15,23 +15,28 @@ class General(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        aiosqlite.register_adapter(commands.Command, lambda x: pickle.dumps(x))
         bot.loop.create_task(self.cmd_init())
 
-        async def react_and_wait(msg: discord.Message, **kwargs: str) -> str:
+        async def react_and_wait(msg: discord.Message, **kwargs) -> tuple:
+            """
+            Allows for users to respond with either a string or an emoji representation of it.
+            The kwarg should be written as {"str_repr"=emoji}.
+            """
             for emote in kwargs.values():
                 await msg.add_reaction(emote)
 
             def check_msg(_msg):
                 return all((_msg.content in kwargs.keys(), _msg.channel == msg.channel, _msg.author == msg.author))
 
-            def check_reaction(reaction, user):
-                return all((reaction.message == msg, reaction.emoji in kwargs.keys(), user == msg.author))
+            def check_reaction(_reaction, user):
+                return all((_reaction.emoji in kwargs.keys(), _reaction.message == msg, user == msg.author))
 
             # ?tag wait_for multiple in dpy for more info
             done, pending = await asyncio.wait(
-                (self.bot.wait_for('message', check=check_msg),
-                 self.bot.wait_for('reaction_add', check=check_reaction)),
-                return_when=asyncio.FIRST_COMPLETED, timeout=60
+                (self.bot.wait_for("message", check=check_msg),
+                 self.bot.wait_for("reaction_add", check=check_reaction)),
+                return_when=asyncio.FIRST_COMPLETED, timeout=60  # TODO: Configurable timeout
             )
             try:
                 coro = done.pop().result()
@@ -45,64 +50,33 @@ class General(commands.Cog):
 
             # If wait_for_message
             if isinstance(coro, discord.Message):
-                return coro.content
+                return coro.content, "message", coro
             else:
                 reaction, _ = coro
-                return {v: k for k, v in kwargs.items()}.get(str(reaction.emoji))
-
+                return {v: k for k, v in kwargs.items()}.get(str(reaction.emoji)), "reaction_add", coro
         bot.react_and_wait = react_and_wait
 
-    # Borrowed a snippet from https://github.com/eunwoo1104/slash-bot/blob/master/main.py
+    # Originally inspired by https://github.com/eunwoo1104/slash-bot/blob/master/main.py
     # Actual logic of custom commands
-    option = manage_commands.create_option("Hidden", "Send reply hidden.", bool, False)
-
-    @staticmethod
-    async def cmd_template(ctx, hidden=None):
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-            async with db.execute("SELECT resp FROM cmds WHERE name=?", (ctx.name,)) as _result:
-                await ctx.send(*await _result.fetchone(), hidden=bool(hidden))
-
     async def cmd_init(self):
         """Loads custom commands into the bot."""
         await self.bot.wait_until_ready()
 
         async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-            # Add all commands
             db.row_factory = aiosqlite.Row
-            async with db.execute("SELECT * FROM cmds") as cursor:
-                rows = await cursor.fetchall()
+            async with db.execute("SELECT cmd FROM cmds") as cursor:
+                async for row in cursor:
+                    self.bot.add_command(*row)
 
-            for row in rows:
-                self.bot.slash.add_slash_command(
-                    self.cmd_template, row["name"], row["desc"], [row["guild_id"]], [self.option]
-                )
-            await self.bot.slash.sync_all_commands()
-
-            # Update command guild IDs
-            # I know config.guilds is a thing, but hey, I'm trying to learn to be creative, okay? Let me go with it.
-            async with db.execute("SELECT DISTINCT guild_id FROM cmds") as cursor:
-                guilds = [row["guild_id"] for row in await cursor.fetchall()]
-
-            for guild_id in guilds:
-                resp = await manage_commands.get_all_commands(self.bot.user.id, self.bot.http.token, guild_id)
-                resp = [(cmd["id"], cmd["name"]) for cmd in resp]
-
-                async with db.execute("SELECT name FROM cmds WHERE guild_id=?", (guild_id,)) as cursor:
-                    cmds = await cursor.fetchall()
-                await db.executemany("UPDATE cmds SET cmd_id=? WHERE name=?", resp)
-                await db.commit()
-
-    @slash.cog_subcommand(base="command", name="create", description="Create a custom command.",
-                          guild_ids=configs.guilds)
+    @commands.group(name="command", aliases=["cmd", "c"])
     @commands.check_any(commands.has_guild_permissions(manage_messages=True), commands.has_any_role())
-    async def command_create(self, ctx, name, response, description=None):
-        if len(name) > 32:
-            return await ctx.send("Command name is too long! (Over 32 characters)")
-        elif len(await manage_commands.get_all_commands(ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id)) >= 100:
-            return await ctx.send("Too many commands in guild! (Limit is 100 commands per guild)")
-            # TODO: I don't think this'll ever become a problem; but if it does,
-            #  consider maybe creating a "helper" bot that creates more commands to bypass this limit?
+    async def cmd(self, ctx):
+        """All custom command related commands."""
+        if not ctx.invoked_subcommand:
+            await ctx.send_help(self.cmd)
 
+    @cmd.command(name="create", aliases=["c", "new", "n"], description="Create a custom command.")
+    async def command_create(self, ctx, name, *, response):
         # TODO: add a configurable amount of custom commands per donator,
         #  and then check that a donator has not surpassed that amount
 
@@ -111,7 +85,7 @@ class General(commands.Cog):
             async with db.execute("SELECT * FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id)) as cursor:
                 result = await cursor.fetchone()
 
-            if bool(result):
+            if result:
                 if not ctx.author.guild_permissions.manage_messages:  # If not moderator
                     return await ctx.send("A command with this name already exists.")
 
@@ -119,42 +93,42 @@ class General(commands.Cog):
                                      "Would you like to overwrite it?\n\n**Y / N**")
                 # pep8 moment xd
                 reaction = await ctx.bot.react_and_wait(msg, Y=":regional_indicator_y:", N=":regional_indicator_n:")
-                if reaction == "Y":
+                if "Y" in reaction:
                     # TODO: Invoke subcommand
                     pass
 
-                # TODO: consider a cleanup command that removes reactions or something idk i'm tired bye
+                await msg.delete()
+                if "message" in reaction:
+                    await reaction[-1].add_reaction(":white_check_mark:")
+                return
 
-            resp = await manage_commands.add_slash_command(
-                ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id, name, description, [self.option]
-            )
+            @commands.command(name=name)
+            @commands.check(lambda _ctx: _ctx.guild.id == ctx.guild.id)
+            async def cmd_template(_ctx):
+                await _ctx.send(response)
 
-            await db.execute("INSERT INTO cmds VALUES (?, ?, ?, ?, ?, ?);",
-                             (name, response, description, ctx.author_id, ctx.guild_id, resp["id"]))
+            await db.execute("INSERT INTO cmds VALUES (?, ?, ?, ?);",
+                             (name, ctx.guild.id, ctx.author.id, cmd_template))
             await db.commit()
 
-        self.bot.slash.add_slash_command(self.cmd_template, name, description, configs.guilds, [self.option])
         await ctx.send(f"Command with name '{name}' successfully created.")
 
-    @slash.cog_subcommand(base="command", name="remove", description="Remove an existing custom command.",
-                          guild_ids=configs.guilds)
+    @cmd.commands(name="remove", aliases=["rm", "delete", "d"], description="Remove an existing custom command.")
     async def command_remove(self, ctx, name):
         async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-            async with db.execute("SELECT user, cmd_id FROM cmds WHERE name=? AND guild_id=?",
+            async with db.execute("SELECT  FROM cmds WHERE name=? AND guild_id=?",
                                   (name, ctx.guild_id)) as cursor:
                 owner, cmd_id = await cursor.fetchone()
             if not (ctx.author.guild_permissions.manage_messages or ctx.author_id == owner):
                 raise commands.MissingPermissions(["manage_messages"])
 
-            await manage_commands.remove_slash_command(ctx.bot.user.id, ctx.bot.http.token, ctx.guild_id, cmd_id)
             await db.execute("DELETE FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id))
             await db.commit()
         await ctx.send(f"Command with name '{name}' successfully removed.")
 
-    @slash.cog_subcommand(base="command", name="update",
-                          description="Update an existing custom command's name, response and/or description.",
-                          guild_ids=configs.guilds)
-    async def update_command(self, ctx, current_name, name=None, response=None, description=None):
+    @cmd.commands(name="update", aliases=["u", "edit", "e"],
+                  description="Update an existing custom command's name, response and/or description.")
+    async def update_command(self, ctx, cmd, name=None, response=None, description=None):
         pass
 
 

@@ -6,7 +6,6 @@ from sqlite3 import PARSE_DECLTYPES
 import aiosqlite
 import discord
 from discord.ext import commands
-from discord_slash import cog_ext as slash
 
 import configs
 from configs import DATABASE_NAME
@@ -18,8 +17,9 @@ class Config(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # Custom GiveawayEntry object
+        # Custom objects
         aiosqlite.register_converter("GIVEAWAY", lambda x: pickle.loads(x))
+        aiosqlite.register_converter("COMMAND", lambda x: pickle.loads(x))
 
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
         async def fetch(ctx, _value):
@@ -39,7 +39,7 @@ class Config(commands.Cog):
                     await db.execute("""
                         INSERT INTO config (guild)
                         VALUES (?);
-                    """, (ctx.guild_id,))
+                    """, (ctx.guild.id,))
                     await db.commit()
                     result = await fetch(ctx, _value)
 
@@ -111,15 +111,12 @@ class Config(commands.Cog):
                         giveaway_role INTEGER
                     );
                 """)
-                # TODO: COMMAND OBJECTS LET'S GO
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS cmds (
                         name TEXT NOT NULL,
-                        resp TEXT,
-                        desc TEXT,
-                        user INTEGER,
-                        guild_id INTEGER,
-                        cmd_id INTEGER
+                        guild_id INTEGER NOT NULL,
+                        owner INTEGER NOT NULL,
+                        cmd COMMAND NOT NULL
                     );
                 """)
                 await db.execute("""
@@ -169,8 +166,7 @@ class Config(commands.Cog):
                 await db.commit()
         bot.loop.create_task(async_init())
 
-    @slash.cog_slash(name="config", description="Edit command configurations for the bot.",
-                     guild_ids=configs.guilds)
+    @commands.command(name="config", description="Edit command configurations for the bot.")
     @commands.has_guild_permissions(manage_messages=True)
     async def config(self, ctx):
         pass

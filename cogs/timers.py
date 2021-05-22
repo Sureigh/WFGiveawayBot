@@ -15,27 +15,27 @@ class Timers(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # TODO: bot.loop.run_until_complete(self.check_expired_giveaways())
+        bot.loop.run_until_complete(self.check_expired_giveaways())
         self.check_timers.start()
 
     def cog_unload(self):
         self.check_timers.cancel()
 
-    """@staticmethod
+    @staticmethod
     async def check_expired_giveaways():
-        ""
+        """
         Although rare, a bot outage is definitely a possibility.
         This method tries to check if any past giveaways that should have ended is not ended, and will forcibly do so.
-        ""
+        """
         async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
             async with db.execute(
-                "SELECT giveaway FROM giveaways WHERE ? > g_end AND ended = 0 ORDER BY end ASC;",
-                (datetime.datetime.utcnow().timestamp(),)
+                    "SELECT giveaway, guild, g_end FROM giveaways WHERE ? > g_end AND ended = 0 ORDER BY g_end ASC;",
+                    (datetime.datetime.utcnow().timestamp(),)
             ) as cursor:
                 async for g in cursor:
                     await g[0].end()
-                    await db.execute("UPDATE giveaways SET ended = 1 WHERE giveaway = ?", (g[0],))
-            await db.commit()"""
+                    await db.execute("UPDATE giveaways SET ended = 1 WHERE guild = ? and g_end = ?", (g[1], g[2]))
+            await db.commit()
 
     @tasks.loop(minutes=configs.TIMER)
     async def check_timers(self):

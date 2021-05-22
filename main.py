@@ -4,13 +4,9 @@
 import aiosqlite
 import discord
 from discord.ext import commands
-from discord_slash import SlashCommand
 
 import configs
 
-# !! IMPORTANT !!
-# Load Error first every time; It has custom errors that other cogs depend on, and handles errors too
-# TODO: so where them custom errors at homie
 COGS = ["error", "config", "general", "giveaway", "sheet", "timers"]
 
 
@@ -32,10 +28,6 @@ class Bot(commands.Bot):
         intents = discord.Intents.default()
         intents.members = True
         super().__init__(command_prefix=prefix, intents=intents, **kwargs)
-
-        # SLASH COMMANDS
-        # DISGUSTING
-        self.slash = SlashCommand(self, override_type=True, sync_commands=True)
 
         self.load_extension('jishaku')
         for cog in COGS:
