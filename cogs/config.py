@@ -7,7 +7,6 @@ import aiosqlite
 import discord
 from discord.ext import commands
 
-import configs
 from configs import DATABASE_NAME
 
 
@@ -23,7 +22,7 @@ class Config(commands.Cog):
 
         # You feed it the context and tell you what value you want, it gives you the value back. Simple, right?
         async def fetch(ctx, _value):
-            async with aiosqlite.connect(DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
+            async with aiosqlite.connect(DATABASE_NAME) as db:
                 # Yes, I know I could use ? instead.
                 # Yes, I tried it.
                 # No, it doesn't work for some reason. Just... let this snippet stay as it is.
@@ -48,10 +47,6 @@ class Config(commands.Cog):
         # Fetch color of embed
         async def color(ctx):
             return discord.Color(int(await fetch(ctx, "embed_colors"), base=16))
-
-        # Fetch message evocation visibility
-        async def hidden(ctx):
-            return bool(await fetch(ctx, "hide_command_evocation"))
 
         # Rank equal to threshold
         async def rank(ctx):
@@ -91,13 +86,13 @@ class Config(commands.Cog):
 
         # Makes all of the previous fetches available as attribute
         # Oh yeah, this is big brain time.
-        for f in [color, hidden, rank, debug, ranks, value, disq]:
+        for f in [color, rank, debug, ranks, value, disq]:
             setattr(bot, f.__name__, f)
 
         # Builds tables.
         # I swear I'm high as fuck
         async def async_init():
-            async with aiosqlite.connect(DATABASE_NAME) as db:
+            async with aiosqlite.connect(DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
                 # The ); at the end of each query is meant to show how I feel about SQL queries
                 # TODO: Each entry could also be a config object! hehe
                 await db.execute("""
@@ -113,8 +108,8 @@ class Config(commands.Cog):
                 """)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS cmds (
+                        guild INTEGER NOT NULL,
                         name TEXT NOT NULL,
-                        guild_id INTEGER NOT NULL,
                         owner INTEGER NOT NULL,
                         cmd COMMAND NOT NULL
                     );
@@ -124,9 +119,8 @@ class Config(commands.Cog):
                         guild INTEGER NOT NULL,
                         giveaway GIVEAWAY NOT NULL,
                         g_end REAL NOT NULL,
-                        g_id TEXT, 
-                        ended INTEGER DEFAULT 0,
-                        UNIQUE(guild, g_id)
+                        g_id TEXT,
+                        ended INTEGER DEFAULT 0
                     );
                 """)
                 # THIS TOOK ME AN HOUR TO WRITE SOMEONE BETTER APPRECIATE THIS OR I'M GONNA BE REALLY ANGRY

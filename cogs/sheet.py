@@ -4,7 +4,6 @@ import aiosqlite
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from discord.ext import commands
-from discord_slash import cog_ext as slash
 
 import configs
 
@@ -48,16 +47,13 @@ class Sheet(commands.Cog):
 
         bot.cache_sheet = cache_sheet
 
-    @slash.cog_slash(name="update_sheet", description="Force updates the cached spreadsheet.",
-                     guild_ids=configs.guilds)
+    @commands.command(name="update_sheet", description="Force updates the cached spreadsheet.")
     async def update_sheet(self, ctx):
-        hidden = await ctx.bot.hidden(ctx)
-        await ctx.defer(hidden)
         if not ctx.author.guild_permissions.manage_messages:
             raise commands.MissingPermissions
-        await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...", hidden=hidden)
+        await ctx.send("<a:RemThonk:696351936051413062> Okay, give me a moment...")
         await ctx.bot.cache_sheet()
-        await ctx.send(content="Successfully updated spreadsheet cache. 👍", hidden=hidden)
+        await ctx.send("Successfully updated spreadsheet cache. 👍")
 
 
 def setup(bot):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import typing
 import pickle
+from sqlite3 import PARSE_DECLTYPES
 
 import discord
 from discord.ext import commands
@@ -48,7 +48,6 @@ class General(commands.Cog):
             for future in pending:
                 future.cancel()
 
-            # If wait_for_message
             if isinstance(coro, discord.Message):
                 return coro.content, "message", coro
             else:
@@ -62,7 +61,7 @@ class General(commands.Cog):
         """Loads custom commands into the bot."""
         await self.bot.wait_until_ready()
 
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT cmd FROM cmds") as cursor:
                 async for row in cursor:
@@ -80,7 +79,7 @@ class General(commands.Cog):
         # TODO: add a configurable amount of custom commands per donator,
         #  and then check that a donator has not surpassed that amount
 
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
             # Checks if command already exists
             async with db.execute("SELECT * FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id)) as cursor:
                 result = await cursor.fetchone()
@@ -108,26 +107,29 @@ class General(commands.Cog):
                 await _ctx.send(response)
 
             await db.execute("INSERT INTO cmds VALUES (?, ?, ?, ?);",
-                             (name, ctx.guild.id, ctx.author.id, cmd_template))
+                             (ctx.guild.id, name, ctx.author.id, cmd_template))
             await db.commit()
 
         await ctx.send(f"Command with name '{name}' successfully created.")
 
-    @cmd.commands(name="remove", aliases=["rm", "delete", "d"], description="Remove an existing custom command.")
+    @cmd.command(name="remove", aliases=["rm", "delete", "d"], description="Remove an existing custom command.")
     async def command_remove(self, ctx, name):
-        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-            async with db.execute("SELECT  FROM cmds WHERE name=? AND guild_id=?",
-                                  (name, ctx.guild_id)) as cursor:
-                owner, cmd_id = await cursor.fetchone()
+        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
+            async with db.execute("SELECT owner, cmd FROM cmds WHERE guild = ? AND name = ?;",
+                                  (ctx.guild.id, name)) as cursor:
+                if row := await cursor.fetchone() is None:
+                    raise IndexError("Command does not exist!")
+
+            owner, cmd = row
             if not (ctx.author.guild_permissions.manage_messages or ctx.author_id == owner):
                 raise commands.MissingPermissions(["manage_messages"])
 
-            await db.execute("DELETE FROM cmds WHERE name=? AND guild_id=?", (name, ctx.guild_id))
+            await db.execute("DELETE FROM cmds WHERE guild = ? AND name = ?;", (ctx.guild.id, name))
             await db.commit()
         await ctx.send(f"Command with name '{name}' successfully removed.")
 
-    @cmd.commands(name="update", aliases=["u", "edit", "e"],
-                  description="Update an existing custom command's name, response and/or description.")
+    @cmd.command(name="update", aliases=["u", "edit", "e"],
+                 description="Update an existing custom command's name, response and/or description.")
     async def update_command(self, ctx, cmd, name=None, response=None, description=None):
         pass
 

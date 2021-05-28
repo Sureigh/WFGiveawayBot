@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import traceback
 
 import aiosqlite
 import discord
@@ -35,6 +36,7 @@ class Bot(commands.Bot):
                 self.load_extension(f"cogs.{cog}")
                 print(f"Loaded cog {cog}")
             except Exception as exc:
+                traceback.print_exc()
                 print(f"Could not load extension {cog} due to {exc.__class__.__name__}: {exc}")
 
     async def on_ready(self):

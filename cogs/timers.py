@@ -45,7 +45,7 @@ class Timers(commands.Cog):
         await bot.cache_sheet()
 
         # Giveaway timer check
-        async with aiosqlite.connect(configs.DATABASE_NAME, detect_types=PARSE_DECLTYPES) as db:
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
             db.row_factory = aiosqlite.Row
 
             async def giveaway(_now, _later, g):

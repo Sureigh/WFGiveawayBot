@@ -14,7 +14,7 @@ import configs
 from errors import GiveawayError
 
 # Thanks Olivia uwu
-def parse_ordinal(num):
+def parse_ordinal(num: int) -> str:
     ordinal = {1: f"{num}st", 2: f"{num}nd", 3: f"{num}rd"}
     if num in [11, 12, 13] or not (place := ordinal.get(num % 10)):
         return f"{num}th"
@@ -142,6 +142,11 @@ class GiveawayEntry(discord.Embed):
 
         return _data
 
+    @staticmethod
+    def parse_time(t: datetime.datetime) -> str:
+        """Turns a datetime object into something more human-friendly."""
+        return t.strftime(f"%-I:%M %p, %a %B, {parse_ordinal(int(t.strftime('%d')))}, %Y")
+
     def __init__(self, ctx: commands.Context, giveaway_data, **kwargs):
         super().__init__(**kwargs)
         self.color = discord.Color.blurple()  # Old blurple best blurple
@@ -168,13 +173,7 @@ class GiveawayEntry(discord.Embed):
             self.add_field(name="Donated by:", value=donor)
         self.add_field(name="Hosted by:", value=ctx.author.mention)
 
-        end_time = (
-            f"{time.strftime('%-I:%M %p')}, "
-            f"{time.strftime('%a %B')} "
-            f"{parse_ordinal(int(time.strftime('%d')))}, "
-            f"{time.strftime('%Y')}"
-        )
-        self.set_footer(text=f"Giveaway ends at {end_time} UTC")
+        self.set_footer(text=f"Giveaway ends at {self.parse_time(time)} UTC")
 
         sender = data.get('sender')
         if _ := ctx.guild.get_member_named(sender):
@@ -186,10 +185,11 @@ class GiveawayEntry(discord.Embed):
         self.add_field(name="Time remaining:", value=humanfriendly.format_timespan(time_left), inline=False)
 
         # We'll need to access these outside later :RemVV:
-        self.ctx = ctx
-        self.time = time.timestamp()
-        self.row = data.get("row")
-        self.users = 0
+        self.ctx = ctx  # Original invocation context
+        self.msg: discord.Message = None  # Giveaway message
+        self.time = time.timestamp()  # Giveaway end time
+        self.row = data.get("row")  # (Optional) row number
+        self.users = 0  # Users who have joined the giveaway
 
         # If the time remaining for giveaway is lesser than the timer's next interval
         # If not (which should be most cases) it will shelve the giveaway on the SQL db
@@ -210,39 +210,38 @@ class GiveawayEntry(discord.Embed):
     async def end(self):
         """Ends the giveaway."""
         # TODO: something something configurable emojis
-        for r in self.ctx.message.reactions:
-            if str(r) == ":tada:":
-                now = datetime.datetime.utcnow()
-                async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-                    async with await db.execute("""
-                        SELECT user FROM disq WHERE guild = ? AND disq_end > ?;
-                    """, (self.ctx.guild.id, now.timestamp())) as cursor:
-                        _ = [e[0] async for e in cursor]
+        r = self.ctx.message.reactions[[str(r) for r in self.ctx.message.reactions].index(":tada:")]
 
-                    # Remove non eligible participants
-                    # TODO: Apply all possible checks here
-                    users = [u async for u in r.users() if u.id not in _]
+        now = datetime.datetime.utcnow()
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+            # Check if disqualified
+            async with await db.execute("""
+                SELECT user FROM disq WHERE guild = ? AND disq_end > ?;
+            """, (self.ctx.guild.id, now.timestamp())) as cursor:
+                dq = [e[0] async for e in cursor]
 
-                    # Congratulate user
-                    # TODO: Configurable win phrases.
-                    user = random.choice(users)
+            # Remove non eligible participants
+            # TODO: Apply all possible checks here
+            self.users = [u async for u in r.users() if u.id not in dq]  # Disqualified
 
-                    # Edit embed and handle ending
-                    end_time = (
-                        f"{now.strftime('%-I:%M %p')}, "
-                        f"{now.strftime('%a %B')} "
-                        f"{parse_ordinal(int(now.strftime('%d')))}, "
-                        f"{now.strftime('%Y')}"
-                    )
-                    self.set_footer(text=f"Giveaway ended at {end_time} UTC")
-                    self.add_field(name="This giveaway has ended.",
-                                   value=f"Final user count: {len(users)}", inline=False)
-                    self.color = discord.Color.darker_gray()
-                    await self.ctx.message.edit(embed=self)
+            # Congratulate user
+            # TODO: Configurable win phrases.
+            config_win = ["Winner winner, chicken dinner!", "Congratulations!", "Epic victory royale moment!"
+                                                                                "Wow, that's pretty poggers!",
+                          "That's so cool!"]
+            win = random.choice(config_win)
+            user = random.choice(self.users)
 
-                    await db.execute("UPDATE giveaways SET ended = 1 WHERE guild = ? and g_end = ?",
-                                     (self.ctx.guild.id, self.time))
-                    await db.commit()
+            # Edit embed and handle ending
+            self.set_footer(text=f"Giveaway ended at {self.parse_time(now)} UTC")
+            self.add_field(name="This giveaway has ended.",
+                           value=f"Final user count: {len(self.users)}", inline=False)
+            self.color = discord.Color.darker_gray()
+            await self.msg.edit(embed=self)
+
+            await db.execute("UPDATE giveaways SET ended = 1 WHERE guild = ? AND g_end = ?;",
+                             (self.ctx.guild.id, self.time))
+            await db.commit()
 
 
 # TODO: fun fact checks (might) be fucked, find out if they actually are lmao
@@ -262,8 +261,7 @@ class Giveaway(commands.Cog):
         bot = ctx.bot
         # Fails if the user ID is not on the sheet
         if (row := await bot.value(ctx)) is None:
-            await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?", hidden=hidden)
-            return
+            return await ctx.send("You haven't donated any plat yet - perhaps you can donate something today?")
 
         row = {k: v for k, v in zip(row.keys(), row)}
 
@@ -281,15 +279,17 @@ class Giveaway(commands.Cog):
 
     # Disqualify
     @commands.group(name="disqualify", aliases=["disq", "d"])
-    async def disq(self):
-        pass
+    async def disq(self, ctx):
+        """All disqalification-related commands."""
+        if not ctx.invoked_subcommand:
+            await ctx.send_help(self.disq)
 
-    @disq.commands(name="user", aliases=["u"], description="Disqualify a user from joining giveaways.")
+    @disq.command(name="user", aliases=["u"], description="Disqualify a user from joining giveaways.")
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_user(self, ctx, user: discord.Member, duration, reason=None):
         pass
 
-    @disq.commands(name="check", aliases=["c"], description="Check a user's disqualification history.")
+    @disq.command(name="check", aliases=["c"], description="Check a user's disqualification history.")
     @commands.has_guild_permissions(manage_messages=True)
     async def disq_check(self, ctx, user: discord.Member):
         """
@@ -304,8 +304,8 @@ class Giveaway(commands.Cog):
         if not self.bot.disq(user):
             return await ctx.send("User has not been disqualified on this server yet.")
 
-    @disq.commands(name="time", aliases=["t"],
-                   description="Check how long until you or a user is re-eligible for giveaways.")
+    @disq.command(name="time", aliases=["t"],
+                  description="Check how long until you or a user is re-eligible for giveaways.")
     async def disq_time(self, ctx, user: discord.Member = None):
         # This should return a timedelta? iunno lol
         if user is None:
@@ -332,26 +332,32 @@ class Giveaway(commands.Cog):
         - Restrictions (Either custom or keywords will be searched),
         - Description (Optional)
         """
-        async with ctx.typing():
-            # Potentially blocking? Just in case, right?
-            giveaway = await self.bot.loop.run_in_executor(
-                None, lambda: GiveawayEntry(ctx, giveaway_data)
-            )
+        await ctx.trigger_typing()
+        # Potentially blocking? Just in case, right?
+        giveaway: GiveawayEntry = await self.bot.loop.run_in_executor(
+            None, lambda: GiveawayEntry(ctx, giveaway_data)
+        )
+
+        async with aiosqlite.connect(configs.DATABASE_NAME) as db:
+            c = await db.execute("SELECT * FROM giveaways WHERE guild = ? AND g_id = ?;", (ctx.guild.id, giveaway.row))
+            r = await c.fetchone()
+            await c.close()
+
+            if r is not None:
+                raise GiveawayError(f"Giveaway {giveaway.row} already exists!")
 
             # TODO: Make this part of config
             config_msg = "**__ :tada: Giveaway :tada: __**"
+            if channel is None:
+                msg = await ctx.send(config_msg, embed=giveaway)
+            else:
+                msg = await channel.send(config_msg, embed=giveaway)
+            await msg.add_reaction(":tada:")
+            giveaway.msg = msg
 
-            async with aiosqlite.connect(configs.DATABASE_NAME) as db:
-                try:
-                    await db.execute("INSERT INTO giveaways VALUES (?, ?, ?, ?)",
-                                     (ctx.guild.id, giveaway, giveaway.time, giveaway.row))
-                    await db.commit()
-                except aiosqlite.DatabaseError:  # Should raise if it breaks a UNIQUE constraint?
-                    raise GiveawayError(f"Giveaway {giveaway.row} already exists!")
-
-        if channel is not None:
-            return await channel.send(config_msg, embed=giveaway)
-        await ctx.send(config_msg, embed=giveaway)
+            await db.execute("INSERT INTO giveaways VALUES (?, ?, ?, ?)",
+                             (ctx.guild.id, giveaway, giveaway.time, giveaway.row))
+            await db.commit()
 
     # TODO: Although we're keeping this for archaic reasons,
     #  add in an option to be able to click a check on the finished giveaway.
